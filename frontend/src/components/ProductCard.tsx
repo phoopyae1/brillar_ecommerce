@@ -27,8 +27,7 @@ export function ProductCard({ product }: ProductCardProps) {
       sx={{
         height: "100%",
         borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
+        border: "1px solid #E2E8F0",
         boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
         transition: "transform 0.2s ease, box-shadow 0.2s ease",
         "&:hover": {
@@ -52,7 +51,8 @@ export function ProductCard({ product }: ProductCardProps) {
             top: 16,
             left: 16,
             bgcolor: "common.white",
-            fontWeight: 600
+            fontWeight: 600,
+            color: "#2563EB"
           }}
         />
       </Box>
@@ -67,10 +67,20 @@ export function ProductCard({ product }: ProductCardProps) {
             </Typography>
           </Box>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6" fontWeight={700}>
+            <Typography variant="h6" fontWeight={700} sx={{ color: "#0F172A" }}>
               ${product.price.toFixed(2)}
             </Typography>
-            <Button variant="contained" size="small">
+            <Button
+              variant="contained"
+              size="small"
+              sx={{
+                bgcolor: "#F59E0B",
+                color: "#111827",
+                "&:hover": {
+                  bgcolor: "#D97706"
+                }
+              }}
+            >
               Add to cart
             </Button>
           </Stack>

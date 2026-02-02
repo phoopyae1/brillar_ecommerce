@@ -27,13 +27,13 @@ const sampleProducts = [
 
 export default function HomePage() {
   return (
-    <Box sx={{ bgcolor: "#f8fafc" }}>
+    <Box sx={{ bgcolor: "#F8FAFC" }}>
       <Box
         sx={{
           position: "relative",
           overflow: "hidden",
           background:
-            "radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 45%), #0f172a",
+            "radial-gradient(circle at top, rgba(37, 99, 235, 0.35), transparent 55%), #0F172A",
           color: "common.white",
           py: { xs: 8, md: 12 }
         }}
@@ -53,10 +53,32 @@ export default function HomePage() {
                   windows tailored to your pace.
                 </Typography>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button variant="contained" size="large" href="/products">
+                  <Button
+                    variant="contained"
+                    size="large"
+                    href="/products"
+                    sx={{
+                      bgcolor: "#F59E0B",
+                      color: "#111827",
+                      "&:hover": {
+                        bgcolor: "#D97706"
+                      }
+                    }}
+                  >
                     Shop new arrivals
                   </Button>
-                  <Button variant="outlined" size="large" href="/products">
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    href="/products"
+                    sx={{
+                      borderColor: "rgba(255, 255, 255, 0.4)",
+                      color: "common.white",
+                      "&:hover": {
+                        borderColor: "rgba(255, 255, 255, 0.7)"
+                      }
+                    }}
+                  >
                     Explore the catalog
                   </Button>
                 </Stack>
@@ -119,10 +141,11 @@ export default function HomePage() {
                   bgcolor: "common.white",
                   borderRadius: 4,
                   p: 3,
+                  border: "1px solid #E2E8F0",
                   boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)"
                 }}
               >
-                <Typography variant="h4" fontWeight={700}>
+                <Typography variant="h4" fontWeight={700} sx={{ color: "#2563EB" }}>
                   {stat.value}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -150,7 +173,7 @@ export default function HomePage() {
               Elevated staples chosen for their design and durability.
             </Typography>
           </Box>
-          <Button variant="text" href="/products">
+          <Button variant="text" href="/products" sx={{ color: "#2563EB" }}>
             View all products
           </Button>
         </Stack>
