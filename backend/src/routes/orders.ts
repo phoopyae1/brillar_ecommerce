@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, OrderStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, requireRole } from "../middleware/auth";
 import { CheckoutSchema } from "@brillar/shared";
@@ -187,7 +187,7 @@ ordersRouter.patch(
 
     const updated = await prisma.order.update({
       where: { id: order.id },
-      data: { status }
+      data: { status: status as OrderStatus }
     });
 
     res.json(updated);
