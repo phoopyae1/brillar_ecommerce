@@ -30,7 +30,8 @@ export default function HomePage() {
     <Box>
       <Box
         sx={{
-          background: "linear-gradient(120deg, #f4f7fb 0%, #dfe8f8 100%)",
+          background:
+            "linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(248, 250, 252, 1) 45%, rgba(15, 23, 42, 0.04) 100%)",
           py: { xs: 6, md: 10 }
         }}
       >
@@ -45,7 +46,8 @@ export default function HomePage() {
           <Button
             variant="contained"
             size="large"
-            sx={{ mt: 4 }}
+            color="warning"
+            sx={{ mt: 4, boxShadow: "0px 10px 20px rgba(245, 158, 11, 0.35)" }}
             href="/products"
           >
             Shop new arrivals
@@ -58,7 +60,9 @@ export default function HomePage() {
           <Typography variant="h5" fontWeight={600}>
             Featured Products
           </Typography>
-          <Button href="/products">View all</Button>
+          <Button href="/products" color="primary">
+            View all
+          </Button>
         </Box>
         <Grid container spacing={3}>
           {sampleProducts.map((product) => (
