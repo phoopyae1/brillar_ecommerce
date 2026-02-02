@@ -1,6 +1,13 @@
 "use client";
 
-import { Card, CardContent, CardMedia, Chip, Stack, Typography } from "@mui/material";
+import {
+  Card,
+  CardContent,
+  CardMedia,
+  Chip,
+  Stack,
+  Typography
+} from "@mui/material";
 
 type ProductCardProps = {
   product: {
@@ -14,7 +21,7 @@ type ProductCardProps = {
 
 export function ProductCard({ product }: ProductCardProps) {
   return (
-    <Card sx={{ height: "100%" }}>
+    <Card sx={{ height: "100%", backgroundColor: "background.paper" }}>
       <CardMedia
         component="img"
         height="180"
@@ -23,9 +30,14 @@ export function ProductCard({ product }: ProductCardProps) {
       />
       <CardContent>
         <Stack spacing={1}>
-          <Chip label={product.category} size="small" sx={{ width: "fit-content" }} />
+          <Chip
+            label={product.category}
+            size="small"
+            color="secondary"
+            sx={{ width: "fit-content", color: "#F8FAFC" }}
+          />
           <Typography variant="h6">{product.name}</Typography>
-          <Typography variant="subtitle1" fontWeight={600}>
+          <Typography variant="subtitle1" fontWeight={600} color="primary">
             ${product.price.toFixed(2)}
           </Typography>
         </Stack>
