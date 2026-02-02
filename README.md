@@ -20,16 +20,45 @@ This implementation includes:
    ```
 3. Run Prisma migrations and seed data:
    ```bash
-   npm run db:migrate --workspace apps/api
-   npm run db:seed --workspace apps/api
+   npm run db:migrate --workspace backend
+   npm run db:seed --workspace backend
    ```
-4. Start the app locally (if not using Docker for web/api):
-   ```bash
-   npm run dev
-   ```
+4. Start the app locally:
+   - Run both frontend and backend together:
+     ```bash
+     npm run dev
+     ```
+   - Run backend only:
+     ```bash
+     npm run dev:api
+     ```
+   - Run frontend only:
+     ```bash
+     npm run dev:web
+     ```
+
+### Frontend vs Backend Scripts
+- Backend only:
+  ```bash
+  npm run dev:api
+  npm run build:api
+  npm run lint:api
+  ```
+- Frontend only:
+  ```bash
+  npm run dev:web
+  npm run build:web
+  npm run lint:web
+  ```
+- Both together:
+  ```bash
+  npm run dev
+  npm run build
+  npm run lint
+  ```
 
 ### Production
-1. Set environment variables (see `apps/api/.env.example` and `apps/web/.env.example`).
+1. Set environment variables (see `backend/.env.example` and `frontend/.env.example`).
 2. Build packages:
    ```bash
    npm run build
@@ -37,7 +66,7 @@ This implementation includes:
 3. Start API and Web servers with process manager or container orchestration.
 
 ## Database Schema (Prisma)
-See `apps/api/prisma/schema.prisma` for full schema. Key tables:
+See `backend/prisma/schema.prisma` for full schema. Key tables:
 - `users`, `refresh_tokens`
 - `products`, `product_variants`
 - `inventory`, `inventory_movements`
@@ -102,7 +131,7 @@ POST /api/inventory/reserve
 - `/admin/inventory` Inventory management (MUI DataGrid)
 - `/admin/orders` Order management (MUI DataGrid)
 
-UI components are in `apps/web/src/components` (e.g., `Header`, `ProductCard`, `AdminLayout`).
+UI components are in `frontend/src/components` (e.g., `Header`, `ProductCard`, `AdminLayout`).
 
 ## Inventory Flow & Edge Cases
 - `quantity_available = quantity_on_hand - quantity_reserved`.

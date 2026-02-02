@@ -14,7 +14,7 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      context: ./backend
       dockerfile: Dockerfile
     environment:
       NODE_ENV: development
@@ -30,7 +30,7 @@ services:
 
   web:
     build:
-      context: ./apps/web
+      context: ./frontend
       dockerfile: Dockerfile
     environment:
       NODE_ENV: development
