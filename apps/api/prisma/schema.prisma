@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  FULFILLED
+  REFUNDED
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  ADJUST
+  RESERVE
+  RELEASE
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(CUSTOMER)
+  refreshTokens RefreshToken[]
+  carts        Cart[]
+  orders       Order[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id          String           @id @default(uuid())
+  name        String
+  slug        String           @unique
+  description String
+  price       Decimal
+  currency    String
+  images      String[]
+  category    String
+  tags        String[]
+  status      ProductStatus    @default(DRAFT)
+  variants    ProductVariant[]
+  inventory   Inventory[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model ProductVariant {
+  id            String     @id @default(uuid())
+  productId     String
+  product       Product    @relation(fields: [productId], references: [id])
+  sku           String     @unique
+  attributes    Json
+  priceOverride Decimal?
+  inventory     Inventory[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Inventory {
+  id               String           @id @default(uuid())
+  productId        String?
+  variantId        String?
+  product          Product?         @relation(fields: [productId], references: [id])
+  variant          ProductVariant?  @relation(fields: [variantId], references: [id])
+  quantityOnHand   Int              @default(0)
+  quantityReserved Int              @default(0)
+  movements        InventoryMovement[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([productId])
+  @@index([variantId])
+}
+
+model InventoryMovement {
+  id           String                 @id @default(uuid())
+  inventoryId  String
+  inventory    Inventory              @relation(fields: [inventoryId], references: [id])
+  type         InventoryMovementType
+  quantity     Int
+  reference    String?
+  reason       String?
+  createdBy    String?
+  createdAt    DateTime               @default(now())
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id         String   @id @default(uuid())
+  cartId     String
+  cart       Cart     @relation(fields: [cartId], references: [id])
+  productId  String
+  variantId  String?
+  product    Product  @relation(fields: [productId], references: [id])
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Order {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  status    OrderStatus @default(PENDING)
+  total     Decimal
+  currency  String
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String
+  variantId String?
+  name      String
+  sku       String?
+  price     Decimal
+  quantity  Int
+}
