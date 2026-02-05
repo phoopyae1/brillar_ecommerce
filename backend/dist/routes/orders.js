@@ -10,11 +10,51 @@ const validate_1 = require("../middleware/validate");
 const inventoryService_1 = require("../services/inventoryService");
 exports.ordersRouter = (0, express_1.Router)();
 exports.ordersRouter.get("/", auth_1.authenticate, async (req, res) => {
+    const userId = req.user.id;
+    console.log("=== Fetching Orders ===");
+    console.log("User ID from token:", userId);
+    console.log("User ID type:", typeof userId);
+    console.log("User email from token:", req.user.email);
+    // Also check if there are ANY orders in the database (for debugging)
+    const allOrdersCount = await prisma_1.prisma.order.count();
+    console.log("Total orders in database:", allOrdersCount);
+    if (allOrdersCount > 0) {
+        const sampleOrder = await prisma_1.prisma.order.findFirst({
+            include: { items: true }
+        });
+        console.log("Sample order from database:", {
+            id: sampleOrder?.id,
+            userId: sampleOrder?.userId,
+            userIdType: typeof sampleOrder?.userId,
+            total: sampleOrder?.total,
+            createdAt: sampleOrder?.createdAt
+        });
+        console.log("User ID match check:", {
+            tokenUserId: userId,
+            orderUserId: sampleOrder?.userId,
+            match: userId === sampleOrder?.userId,
+            strictEqual: userId === sampleOrder?.userId,
+            looseEqual: userId == sampleOrder?.userId
+        });
+    }
     const orders = await prisma_1.prisma.order.findMany({
-        where: { userId: req.user.id },
+        where: { userId },
         include: { items: true },
         orderBy: { createdAt: "desc" }
     });
+    console.log(`Found ${orders.length} orders for user ${userId}`);
+    if (orders.length > 0) {
+        console.log("First matching order:", {
+            id: orders[0].id,
+            userId: orders[0].userId,
+            total: orders[0].total,
+            createdAt: orders[0].createdAt
+        });
+    }
+    else {
+        console.warn("No orders found for user ID:", userId);
+    }
+    console.log("========================");
     res.json(orders);
 });
 exports.ordersRouter.get("/:id", auth_1.authenticate, async (req, res) => {
@@ -29,13 +69,36 @@ exports.ordersRouter.get("/:id", auth_1.authenticate, async (req, res) => {
 });
 exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.validate)(shared_1.CheckoutSchema), async (req, res) => {
     const cartId = req.headers["x-cart-id"];
-    const cart = await prisma_1.prisma.cart.findFirst({
+    // First try to find cart by cartId and userId
+    let cart = await prisma_1.prisma.cart.findFirst({
         where: {
             id: cartId,
             userId: req.user.id
         },
         include: { items: true }
     });
+    // If not found, try to find by cartId only (guest cart)
+    if (!cart && cartId) {
+        cart = await prisma_1.prisma.cart.findUnique({
+            where: { id: cartId },
+            include: { items: true }
+        });
+        // If found as guest cart, update it to have userId
+        if (cart) {
+            cart = await prisma_1.prisma.cart.update({
+                where: { id: cartId },
+                data: { userId: req.user.id },
+                include: { items: true }
+            });
+        }
+    }
+    // If still not found, try to find user's existing cart
+    if (!cart) {
+        cart = await prisma_1.prisma.cart.findFirst({
+            where: { userId: req.user.id },
+            include: { items: true }
+        });
+    }
     if (!cart || cart.items.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });
     }
@@ -91,9 +154,11 @@ exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.valid
                 quantity: item.quantity
             });
         }
+        const userId = req.user.id;
+        console.log("Creating order for user ID:", userId);
         const created = await tx.order.create({
             data: {
-                userId: req.user.id,
+                userId,
                 status: "PAID",
                 total,
                 currency: "USD",
@@ -102,6 +167,12 @@ exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.valid
                 }
             },
             include: { items: true }
+        });
+        console.log("Order created successfully:", {
+            id: created.id,
+            userId: created.userId,
+            total: created.total,
+            itemsCount: created.items.length
         });
         await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
         return created;

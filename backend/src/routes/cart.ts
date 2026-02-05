@@ -26,7 +26,14 @@ cartRouter.get("/", optionalAuth, async (req, res) => {
   const cart = await getOrCreateCart(req.user?.id, cartId);
   const full = await prisma.cart.findUnique({
     where: { id: cart.id },
-    include: { items: true }
+    include: { 
+      items: {
+        include: {
+          product: true,
+          variant: true
+        }
+      }
+    }
   });
   res.json({ ...full, cartId: cart.id });
 });

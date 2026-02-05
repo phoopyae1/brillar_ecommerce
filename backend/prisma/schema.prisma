@@ -61,6 +61,7 @@ model Product {
   slug        String           @unique
   description String
   price       Decimal
+  cost        Decimal?         // Purchase cost for profit calculation
   currency    String
   images      String[]
   category    String

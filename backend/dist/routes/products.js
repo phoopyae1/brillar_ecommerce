@@ -34,6 +34,45 @@ exports.productsRouter.get("/", async (req, res) => {
         }),
         prisma_1.prisma.product.count({ where })
     ]);
+    // Ensure all products have inventory records (backfill missing ones)
+    // Use Promise.allSettled to handle errors gracefully and not block the response
+    await Promise.allSettled(items.map(async (product) => {
+        if (product.variants.length > 0) {
+            // For products with variants, ensure each variant has inventory
+            await Promise.all(product.variants.map(async (variant) => {
+                const existingInventory = await prisma_1.prisma.inventory.findFirst({
+                    where: { variantId: variant.id }
+                });
+                if (!existingInventory) {
+                    await prisma_1.prisma.inventory.create({
+                        data: {
+                            variantId: variant.id,
+                            quantityOnHand: 0,
+                            quantityReserved: 0
+                        }
+                    });
+                }
+            }));
+        }
+        else {
+            // For products without variants, ensure product-level inventory exists
+            const existingInventory = await prisma_1.prisma.inventory.findFirst({
+                where: {
+                    productId: product.id,
+                    variantId: null
+                }
+            });
+            if (!existingInventory) {
+                await prisma_1.prisma.inventory.create({
+                    data: {
+                        productId: product.id,
+                        quantityOnHand: 0,
+                        quantityReserved: 0
+                    }
+                });
+            }
+        }
+    }));
     res.json({
         items,
         total,
@@ -52,60 +91,89 @@ exports.productsRouter.get("/:id", async (req, res) => {
     res.json(product);
 });
 exports.productsRouter.post("/", auth_1.authenticate, (0, auth_1.requireRole)("ADMIN"), (0, validate_1.validate)(shared_1.ProductInputSchema), async (req, res) => {
-    const product = await prisma_1.prisma.$transaction(async (tx) => {
-        const created = await tx.product.create({
-            data: {
-                ...req.body,
-                variants: req.body.variants
-                    ? {
-                        create: req.body.variants.map((variant) => ({
-                            sku: variant.sku,
-                            attributes: variant.attributes,
-                            priceOverride: variant.priceOverride
-                        }))
-                    }
-                    : undefined
-            },
-            include: { variants: true }
+    try {
+        // Check if slug already exists
+        const existingProduct = await prisma_1.prisma.product.findUnique({
+            where: { slug: req.body.slug }
         });
-        if (created.variants.length > 0) {
-            for (const variant of created.variants) {
+        if (existingProduct) {
+            return res.status(400).json({
+                message: `A product with the slug "${req.body.slug}" already exists. Please use a different slug.`
+            });
+        }
+        const { stock, ...productData } = req.body;
+        const initialStock = stock ? parseInt(stock) : 0;
+        const product = await prisma_1.prisma.$transaction(async (tx) => {
+            const created = await tx.product.create({
+                data: {
+                    ...productData,
+                    variants: productData.variants
+                        ? {
+                            create: productData.variants.map((variant) => ({
+                                sku: variant.sku,
+                                attributes: variant.attributes,
+                                priceOverride: variant.priceOverride
+                            }))
+                        }
+                        : undefined
+                },
+                include: { variants: true }
+            });
+            if (created.variants.length > 0) {
+                for (const variant of created.variants) {
+                    await tx.inventory.create({
+                        data: {
+                            variantId: variant.id,
+                            quantityOnHand: initialStock,
+                            quantityReserved: 0
+                        }
+                    });
+                }
+            }
+            else {
                 await tx.inventory.create({
                     data: {
-                        variantId: variant.id,
-                        quantityOnHand: 0,
+                        productId: created.id,
+                        quantityOnHand: initialStock,
                         quantityReserved: 0
                     }
                 });
             }
+            return created;
+        });
+        res.status(201).json(product);
+    }
+    catch (error) {
+        // Handle Prisma unique constraint errors
+        if (error.code === "P2002") {
+            if (error.meta?.target?.includes("slug")) {
+                return res.status(400).json({
+                    message: `A product with the slug "${req.body.slug}" already exists. Please use a different slug.`
+                });
+            }
         }
-        else {
-            await tx.inventory.create({
-                data: {
-                    productId: created.id,
-                    quantityOnHand: 0,
-                    quantityReserved: 0
-                }
-            });
-        }
-        return created;
-    });
-    res.status(201).json(product);
+        throw error;
+    }
 });
 exports.productsRouter.put("/:id", auth_1.authenticate, (0, auth_1.requireRole)("ADMIN"), (0, validate_1.validate)(shared_1.ProductInputSchema), async (req, res) => {
+    const updateData = {
+        name: req.body.name,
+        slug: req.body.slug,
+        description: req.body.description,
+        price: req.body.price,
+        currency: req.body.currency,
+        images: req.body.images,
+        category: req.body.category,
+        tags: req.body.tags,
+        status: req.body.status
+    };
+    // Include cost if provided, or set to null if not provided
+    if (req.body.cost !== undefined) {
+        updateData.cost = req.body.cost || null;
+    }
     const product = await prisma_1.prisma.product.update({
         where: { id: req.params.id },
-        data: {
-            name: req.body.name,
-            slug: req.body.slug,
-            description: req.body.description,
-            price: req.body.price,
-            currency: req.body.currency,
-            images: req.body.images,
-            category: req.body.category,
-            tags: req.body.tags,
-            status: req.body.status
-        }
+        data: updateData
     });
     res.json(product);
 });

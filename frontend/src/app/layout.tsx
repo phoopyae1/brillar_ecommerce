@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v13-appRouter";
 import { ThemeRegistry } from "../components/ThemeRegistry";
-import { Header } from "../components/Header";
+import { ConditionalHeader } from "../components/ConditionalHeader";
 
 export const metadata: Metadata = {
-  title: "Brillar Commerce",
+  title: "Brillar Ecommerce",
   description: "Premium e-commerce experience"
 };
 
@@ -18,7 +18,7 @@ export default function RootLayout({
       <body>
         <AppRouterCacheProvider>
           <ThemeRegistry>
-            <Header />
+            <ConditionalHeader />
             {children}
           </ThemeRegistry>
         </AppRouterCacheProvider>

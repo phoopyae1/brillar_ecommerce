@@ -40,6 +40,7 @@ export const ProductInputSchema = z.object({
   slug: z.string().min(2),
   description: z.string().min(10),
   price: z.number().positive(),
+  cost: z.number().positive().optional(), // Purchase cost for profit calculation
   currency: z.string().min(3),
   images: z.array(z.string().url()).default([]),
   category: z.string().min(2),

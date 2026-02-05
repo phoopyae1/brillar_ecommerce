@@ -7,18 +7,18 @@ import { createTheme } from "@mui/material/styles";
 const theme = createTheme({
   palette: {
     mode: "light",
-    primary: { main: "#2563EB" },
-    secondary: { main: "#0F172A" },
-    warning: { main: "#F59E0B" },
+    primary: { main: "#2563EB" }, // Blue
+    secondary: { main: "#1E293B" }, // Dark Navy
+    warning: { main: "#F59E0B" }, // Amber / Orange (CTA/Accent)
     success: { main: "#16A34A" },
     error: { main: "#DC2626" },
     background: {
-      default: "#F8FAFC",
-      paper: "#FFFFFF"
+      default: "#F8FAFC", // Background
+      paper: "#FFFFFF" // Card / Surface
     },
     text: {
-      primary: "#111827",
-      secondary: "#475569"
+      primary: "#0F172A", // Text Primary
+      secondary: "#64748B" // Text Muted
     }
   },
   typography: {

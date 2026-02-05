@@ -47,18 +47,78 @@ inventoryRouter.post(
   validate(InventoryAdjustSchema),
   async (req, res) => {
     const { productId, variantId, quantity, reason } = req.body;
-    const inventory = await prisma.inventory.findFirst({
-      where: {
-        productId: productId ?? undefined,
-        variantId: variantId ?? undefined
-      }
+    
+    // Validate quantity
+    if (typeof quantity !== 'number' || isNaN(quantity) || quantity < 0) {
+      return res.status(400).json({ message: "Quantity must be a non-negative number" });
+    }
+    
+    // Ensure we have either productId or variantId
+    if (!productId && !variantId) {
+      return res.status(400).json({ message: "Either productId or variantId must be provided" });
+    }
+    
+    // Build where clause - explicitly handle null for variantId when not provided
+    const whereClause: any = {};
+    if (productId) {
+      whereClause.productId = productId;
+    }
+    if (variantId) {
+      whereClause.variantId = variantId;
+    } else if (productId) {
+      // When looking for product-level inventory, variantId must be null
+      whereClause.variantId = null;
+    }
+    
+    let inventory = await prisma.inventory.findFirst({
+      where: whereClause
     });
 
+    // If inventory doesn't exist, create it
     if (!inventory) {
-      return res.status(404).json({ message: "Inventory record not found" });
+      // Verify product exists
+      if (productId) {
+        const product = await prisma.product.findUnique({
+          where: { id: productId }
+        });
+        if (!product) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+      }
+      if (variantId) {
+        const variant = await prisma.productVariant.findUnique({
+          where: { id: variantId }
+        });
+        if (!variant) {
+          return res.status(404).json({ message: "Product variant not found" });
+        }
+      }
+
+      inventory = await prisma.inventory.create({
+        data: {
+          productId: productId ?? null,
+          variantId: variantId ?? null,
+          quantityOnHand: quantity,
+          quantityReserved: 0
+        }
+      });
+
+      await prisma.inventoryMovement.create({
+        data: {
+          inventoryId: inventory.id,
+          type: "ADJUST",
+          quantity,
+          reason: reason || "Initial stock setup",
+          createdBy: req.user?.id
+        }
+      });
+
+      return res.json(inventory);
     }
 
-    const adjustment = adjustInventory(inventory, quantity);
+    // Calculate delta (difference between desired quantity and current quantity)
+    const quantityDelta = quantity - inventory.quantityOnHand;
+    const adjustment = adjustInventory(inventory, quantityDelta);
 
     const updated = await prisma.inventory.update({
       where: { id: inventory.id },
@@ -71,7 +131,7 @@ inventoryRouter.post(
       data: {
         inventoryId: inventory.id,
         type: "ADJUST",
-        quantity,
+        quantity: quantityDelta,
         reason,
         createdBy: req.user?.id
       }
