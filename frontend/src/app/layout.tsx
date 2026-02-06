@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v13-appRouter";
+import { Box } from "@mui/material";
 import { ThemeRegistry } from "../components/ThemeRegistry";
 import { ConditionalHeader } from "../components/ConditionalHeader";
+import { ConditionalFooter } from "../components/ConditionalFooter";
+import { IntegrationWidget } from "../components/IntegrationWidget";
 
 export const metadata: Metadata = {
   title: "Brillar Ecommerce",
@@ -15,11 +18,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
         <AppRouterCacheProvider>
           <ThemeRegistry>
             <ConditionalHeader />
-            {children}
+            <Box component="main" sx={{ flex: 1 }}>
+              {children}
+            </Box>
+            <ConditionalFooter />
+            <IntegrationWidget />
           </ThemeRegistry>
         </AppRouterCacheProvider>
       </body>

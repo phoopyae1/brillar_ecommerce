@@ -161,6 +161,8 @@ export default function CartPage() {
       if (response.ok) {
         // Remove item from local state
         setCartItems((prev) => prev.filter((item) => item.id !== itemId));
+        // Dispatch custom event to update cart count in header
+        window.dispatchEvent(new CustomEvent("cartUpdated"));
       }
     } catch (error) {
       console.error("Error removing item:", error);

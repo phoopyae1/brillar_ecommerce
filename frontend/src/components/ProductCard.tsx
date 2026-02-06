@@ -18,6 +18,8 @@ import {
 } from "@mui/material";
 import AddShoppingCartIcon from "@mui/icons-material/AddShoppingCart";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
 import { isAuthenticated } from "../utils/auth";
 
 type ProductCardProps = {
@@ -42,6 +44,7 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
     }
     return false;
   });
+  const [quantity, setQuantity] = React.useState(1);
   const [addingToCart, setAddingToCart] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState<{ open: boolean; message: string; severity: "success" | "error" }>({
     open: false,
@@ -106,6 +109,10 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
     }
   };
 
+  const handleQuantityChange = (delta: number) => {
+    setQuantity((prev) => Math.max(1, prev + delta));
+  };
+
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
@@ -137,7 +144,7 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
         headers,
         body: JSON.stringify({
           productId: product.id,
-          quantity: 1
+          quantity: quantity
         })
       });
 
@@ -152,7 +159,7 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
             headers,
             body: JSON.stringify({
               productId: product.id,
-              quantity: 1
+              quantity: quantity
             })
           });
         } else {
@@ -181,11 +188,17 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
         localStorage.setItem("cartId", data.cartId);
       }
 
+      // Dispatch custom event to update cart count in header
+      window.dispatchEvent(new CustomEvent("cartUpdated"));
+
       setSnackbar({
         open: true,
-        message: `${product.name} added to cart!`,
+        message: `${quantity} ${quantity === 1 ? "item" : "items"} of ${product.name} added to cart!`,
         severity: "success"
       });
+      
+      // Reset quantity after adding to cart
+      setQuantity(1);
     } catch (error: any) {
       console.error("Error adding to cart:", error);
       setSnackbar({
@@ -290,28 +303,82 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
           >
             {product.name}
           </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: isLoggedIn && !hideAddToCart ? "space-between" : "flex-start" }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
             <Typography variant="h5" fontWeight={700} color="primary.main">
               ${product.price.toFixed(2)}
             </Typography>
             {isLoggedIn && !hideAddToCart && (
-              <Tooltip title="Add to cart" arrow enterDelay={100} leaveDelay={0}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<AddShoppingCartIcon />}
-                  onClick={handleAddToCart}
-                  disabled={addingToCart}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {/* Quantity Controls */}
+                <Box
                   sx={{
-                    borderRadius: 999,
-                    px: 2,
-                    textTransform: "none",
-                    fontWeight: 600
+                    display: "flex",
+                    alignItems: "center",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 2,
+                    overflow: "hidden"
                   }}
                 >
-                  {addingToCart ? "Adding..." : "Add"}
-                </Button>
-              </Tooltip>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuantityChange(-1);
+                    }}
+                    disabled={quantity <= 1}
+                    sx={{
+                      borderRadius: 0,
+                      "&:hover": { backgroundColor: "action.hover" }
+                    }}
+                  >
+                    <RemoveIcon fontSize="small" />
+                  </IconButton>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      minWidth: 40,
+                      textAlign: "center",
+                      fontWeight: 600,
+                      px: 1
+                    }}
+                  >
+                    {quantity}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuantityChange(1);
+                    }}
+                    sx={{
+                      borderRadius: 0,
+                      "&:hover": { backgroundColor: "action.hover" }
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                {/* Add to Cart Button */}
+                <Tooltip title="Add to cart" arrow enterDelay={100} leaveDelay={0}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<AddShoppingCartIcon />}
+                    onClick={handleAddToCart}
+                    disabled={addingToCart}
+                    sx={{
+                      borderRadius: 2,
+                      px: 2,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      flex: 1
+                    }}
+                  >
+                    {addingToCart ? "Adding..." : "Add"}
+                  </Button>
+                </Tooltip>
+              </Box>
             )}
           </Box>
         </Stack>

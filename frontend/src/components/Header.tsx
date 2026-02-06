@@ -19,11 +19,49 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LoginIcon from "@mui/icons-material/Login";
 import { isAdmin, isAuthenticated } from "../utils/auth";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 export function Header() {
   const pathname = usePathname();
   const [isAdminUser, setIsAdminUser] = React.useState(false);
   const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+  const [cartItemCount, setCartItemCount] = React.useState(0);
   const isAdminPage = pathname?.startsWith("/admin") || false;
+
+  const fetchCartCount = React.useCallback(async () => {
+    if (!isAuthenticated() || isAdminPage) {
+      setCartItemCount(0);
+      return;
+    }
+
+    try {
+      const accessToken = localStorage.getItem("accessToken");
+      const cartId = localStorage.getItem("cartId");
+
+      const headers: Record<string, string> = {};
+      if (accessToken) {
+        headers.Authorization = `Bearer ${accessToken}`;
+      }
+      if (cartId) {
+        headers["x-cart-id"] = cartId;
+      }
+
+      const response = await fetch(`${API_URL}/api/cart`, {
+        headers
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const count = data.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
+        setCartItemCount(count);
+      } else {
+        setCartItemCount(0);
+      }
+    } catch (error) {
+      console.error("Error fetching cart count:", error);
+      setCartItemCount(0);
+    }
+  }, [isAdminPage]);
 
   React.useEffect(() => {
     // Check auth status on mount and when storage changes
@@ -48,6 +86,28 @@ export function Header() {
       clearInterval(interval);
     };
   }, []);
+
+  // Fetch cart count when logged in
+  React.useEffect(() => {
+    if (isLoggedIn && !isAdminPage) {
+      fetchCartCount();
+      // Refresh cart count periodically
+      const cartInterval = setInterval(fetchCartCount, 3000);
+      return () => clearInterval(cartInterval);
+    } else {
+      setCartItemCount(0);
+    }
+  }, [isLoggedIn, isAdminPage, fetchCartCount]);
+
+  // Listen for custom cart update events
+  React.useEffect(() => {
+    const handleCartUpdate = () => {
+      fetchCartCount();
+    };
+    
+    window.addEventListener("cartUpdated", handleCartUpdate);
+    return () => window.removeEventListener("cartUpdated", handleCartUpdate);
+  }, [fetchCartCount]);
 
   return (
     <AppBar
@@ -101,7 +161,7 @@ export function Header() {
                   "&:hover": { backgroundColor: "action.hover" }
                 }}
               >
-                <Badge badgeContent={2} color="primary">
+                <Badge badgeContent={cartItemCount > 0 ? cartItemCount : undefined} color="primary">
                   <ShoppingCartIcon />
                 </Badge>
               </IconButton>
