@@ -145,7 +145,8 @@ export default function CartPage() {
     };
 
     fetchCart();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount - router changes shouldn't trigger refetch
 
   const handleRemoveItem = async (itemId: string) => {
     try {

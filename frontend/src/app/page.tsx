@@ -219,17 +219,17 @@ export default function HomePage() {
               }
               
               return (
-                <Grid item xs={12} sm={6} md={4} key={product.id}>
-                  <ProductCard
-                    product={{
-                      id: product.id,
-                      name: product.name,
-                      price: Number(product.price),
+              <Grid item xs={12} sm={6} md={4} key={product.id}>
+                <ProductCard
+                  product={{
+                    id: product.id,
+                    name: product.name,
+                    price: Number(product.price),
                       image: imageUrl,
-                      category: product.category
-                    }}
-                  />
-                </Grid>
+                    category: product.category
+                  }}
+                />
+              </Grid>
               );
             })}
           </Grid>

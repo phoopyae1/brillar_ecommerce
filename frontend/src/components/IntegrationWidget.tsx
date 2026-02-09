@@ -35,13 +35,24 @@ export function IntegrationWidget() {
     const checkAuth = () => {
       const authenticated = isAuthenticated();
       const user = getUser();
-      setIsLoggedIn(authenticated);
-      setUserRole(user?.role || null);
+      setIsLoggedIn((prev) => prev !== authenticated ? authenticated : prev);
+      setUserRole((prev) => {
+        const newRole = user?.role || null;
+        return prev !== newRole ? newRole : prev;
+      });
     };
 
     checkAuth();
-    const interval = setInterval(checkAuth, 1000);
-    return () => clearInterval(interval);
+    
+    // Listen for storage changes only - no polling
+    const handleStorageChange = () => {
+      checkAuth();
+    };
+    
+    window.addEventListener("storage", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, []);
 
   // Determine which role to load integration for

@@ -28,46 +28,70 @@ export function Header() {
   const [cartItemCount, setCartItemCount] = React.useState(0);
   const isAdminPage = pathname?.startsWith("/admin") || false;
 
-  const fetchCartCount = React.useCallback(async () => {
-    if (!isAuthenticated() || isAdminPage) {
-      setCartItemCount(0);
-      return;
-    }
-
-    try {
-      const accessToken = localStorage.getItem("accessToken");
-      const cartId = localStorage.getItem("cartId");
-
-      const headers: Record<string, string> = {};
-      if (accessToken) {
-        headers.Authorization = `Bearer ${accessToken}`;
-      }
-      if (cartId) {
-        headers["x-cart-id"] = cartId;
+  // Use ref to store fetchCartCount function - stable across renders
+  const fetchCartCountRef = React.useRef<() => Promise<void>>();
+  
+  // Initialize fetchCartCount function once
+  React.useEffect(() => {
+    fetchCartCountRef.current = async () => {
+      // Check current state directly, not from closure
+      const currentPathname = pathname;
+      const currentIsAdminPage = currentPathname?.startsWith("/admin") || false;
+      
+      if (!isAuthenticated() || currentIsAdminPage) {
+        setCartItemCount(0);
+        return;
       }
 
-      const response = await fetch(`${API_URL}/api/cart`, {
-        headers
-      });
+      try {
+        const accessToken = localStorage.getItem("accessToken");
+        const cartId = localStorage.getItem("cartId");
 
-      if (response.ok) {
-        const data = await response.json();
-        const count = data.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
-        setCartItemCount(count);
-      } else {
+        const headers: Record<string, string> = {};
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+        }
+        if (cartId) {
+          headers["x-cart-id"] = cartId;
+        }
+
+        const response = await fetch(`${API_URL}/api/cart`, {
+          headers
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const count = data.items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0;
+          setCartItemCount(count);
+        } else {
+          setCartItemCount(0);
+        }
+      } catch (error) {
+        console.error("Error fetching cart count:", error);
         setCartItemCount(0);
       }
-    } catch (error) {
-      console.error("Error fetching cart count:", error);
-      setCartItemCount(0);
-    }
-  }, [isAdminPage]);
+    };
+  }, [pathname]); // Only recreate when pathname actually changes
 
   React.useEffect(() => {
     // Check auth status on mount and when storage changes
     const checkAuth = () => {
-      setIsLoggedIn(isAuthenticated());
-      setIsAdminUser(isAdmin());
+      const authenticated = isAuthenticated();
+      const admin = isAdmin();
+      
+      // Only update state if values actually changed to prevent unnecessary re-renders
+      setIsLoggedIn((prev) => {
+        if (prev !== authenticated) {
+          return authenticated;
+        }
+        return prev;
+      });
+      setIsAdminUser((prev) => {
+        if (prev !== admin) {
+          return admin;
+        }
+        return prev;
+      });
     };
     
     checkAuth();
@@ -78,36 +102,35 @@ export function Header() {
     };
     
     window.addEventListener("storage", handleStorageChange);
-    // Also check periodically in case of same-tab changes
-    const interval = setInterval(checkAuth, 1000);
+    // Remove periodic check - only check on storage events
+    // This eliminates unnecessary re-renders and API calls
     
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      clearInterval(interval);
     };
   }, []);
 
-  // Fetch cart count when logged in
+  // Fetch cart count when logged in - only fetch on mount and when login state changes
   React.useEffect(() => {
     if (isLoggedIn && !isAdminPage) {
-      fetchCartCount();
-      // Refresh cart count periodically
-      const cartInterval = setInterval(fetchCartCount, 3000);
-      return () => clearInterval(cartInterval);
+      // Fetch immediately on login
+      fetchCartCountRef.current?.();
+      // NO POLLING - rely only on cartUpdated events for real-time updates
+      // This prevents constant API calls
     } else {
       setCartItemCount(0);
     }
-  }, [isLoggedIn, isAdminPage, fetchCartCount]);
+  }, [isLoggedIn, isAdminPage]); // Only re-run when login state or page changes
 
   // Listen for custom cart update events
   React.useEffect(() => {
     const handleCartUpdate = () => {
-      fetchCartCount();
+      fetchCartCountRef.current?.();
     };
     
     window.addEventListener("cartUpdated", handleCartUpdate);
     return () => window.removeEventListener("cartUpdated", handleCartUpdate);
-  }, [fetchCartCount]);
+  }, []); // Empty dependency array - fetchCartCountRef is stable
 
   return (
     <AppBar

@@ -486,43 +486,43 @@ export default function AdminPage() {
                     <Typography color="text.secondary">No orders yet</Typography>
                   </Box>
                 ) : (
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 600 }}>Order ID</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Customer</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600 }}>Order ID</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Customer</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Amount</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {recentOrders.map((order) => (
-                        <TableRow key={order.id} hover>
-                          <TableCell>{order.id}</TableCell>
-                          <TableCell>{order.customer}</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>{order.amount}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={order.status}
-                              size="small"
-                              color={
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recentOrders.map((order) => (
+                      <TableRow key={order.id} hover>
+                        <TableCell>{order.id}</TableCell>
+                        <TableCell>{order.customer}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>{order.amount}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={order.status}
+                            size="small"
+                            color={
                                 order.status === "PAID"
-                                  ? "success"
+                                ? "success"
                                   : order.status === "PENDING"
-                                  ? "warning"
+                                ? "warning"
                                   : order.status === "FULFILLED"
                                   ? "primary"
-                                  : "default"
-                              }
-                              sx={{ fontWeight: 500 }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ color: "text.secondary" }}>{order.time}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                                : "default"
+                            }
+                            sx={{ fontWeight: 500 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ color: "text.secondary" }}>{order.time}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
                 )}
               </CardContent>
             </Card>
@@ -547,32 +547,32 @@ export default function AdminPage() {
                     <Typography color="text.secondary">No low stock items</Typography>
                   </Box>
                 ) : (
-                  <Stack spacing={2}>
-                    {lowStockProducts.map((product) => (
-                      <Box
-                        key={product.sku}
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: product.stock < 5 ? "error.50" : "warning.50",
-                          border: "1px solid",
-                          borderColor: product.stock < 5 ? "error.200" : "warning.200"
-                        }}
-                      >
-                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                          <Typography variant="body2" fontWeight={600}>
-                            {product.name}
-                          </Typography>
-                          <Typography variant="body2" fontWeight={700} color="error.main">
-                            {product.stock} left
-                          </Typography>
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          SKU: {product.sku}
+                <Stack spacing={2}>
+                  {lowStockProducts.map((product) => (
+                    <Box
+                      key={product.sku}
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        backgroundColor: product.stock < 5 ? "error.50" : "warning.50",
+                        border: "1px solid",
+                        borderColor: product.stock < 5 ? "error.200" : "warning.200"
+                      }}
+                    >
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                        <Typography variant="body2" fontWeight={600}>
+                          {product.name}
+                        </Typography>
+                        <Typography variant="body2" fontWeight={700} color="error.main">
+                          {product.stock} left
                         </Typography>
                       </Box>
-                    ))}
-                  </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        SKU: {product.sku}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
                 )}
                 <Button
                   component={Link}

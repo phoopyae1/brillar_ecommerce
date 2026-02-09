@@ -319,7 +319,7 @@ ordersRouter.post(
 
       const userId = req.user!.id;
       console.log("Creating order for user ID:", userId);
-      
+
       const created = await tx.order.create({
         data: {
           userId,
@@ -332,7 +332,7 @@ ordersRouter.post(
         },
         include: { items: true }
       });
-      
+
       console.log("Order created successfully:", {
         id: created.id,
         userId: created.userId,

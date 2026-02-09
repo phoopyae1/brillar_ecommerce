@@ -35,8 +35,15 @@ app.use(express.json());
 app.use(morgan("combined"));
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 200
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Increased limit for development/production
+    message: "Too many requests, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+      // Skip rate limiting for health checks
+      return req.path === "/health";
+    }
   })
 );
 

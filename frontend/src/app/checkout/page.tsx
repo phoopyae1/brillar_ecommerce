@@ -150,7 +150,8 @@ export default function CheckoutPage() {
     };
 
     fetchCart();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount - router changes shouldn't trigger refetch
 
   const handlePlaceOrder = async () => {
     if (!isAuthenticated()) {
@@ -362,7 +363,7 @@ export default function CheckoutPage() {
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <Typography color="text.secondary">Shipping</Typography>
                     <Typography fontWeight={600}>
-                      {shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}
+                      {shipping === 0 ? "Free" : `$${(shipping as number).toFixed(2)}`}
                     </Typography>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>

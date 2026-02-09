@@ -69,8 +69,8 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = React.useState("newest");
   const [tabValue, setTabValue] = React.useState(0);
 
-  // Fetch all products and categories
-  const fetchProducts = React.useCallback(async () => {
+  // Fetch all products and categories with retry logic
+  const fetchProducts = React.useCallback(async (retryCount = 0) => {
     try {
       setLoading(true);
       setError(null);
@@ -82,6 +82,19 @@ export default function ProductsPage() {
           "Content-Type": "application/json"
         }
       });
+      
+      // Handle rate limiting with retry
+      if (response.status === 429) {
+        if (retryCount < 3) {
+          const retryAfter = response.headers.get("Retry-After");
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retryCount) * 1000; // Exponential backoff
+          console.log(`Rate limited. Retrying after ${waitTime}ms... (attempt ${retryCount + 1}/3)`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          return fetchProducts(retryCount + 1);
+        } else {
+          throw new Error("Too many requests. Please wait a moment and try again.");
+        }
+      }
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -396,7 +409,7 @@ export default function ProductsPage() {
               </Typography>
               <Button
                 variant="contained"
-                onClick={fetchProducts}
+                onClick={() => fetchProducts()}
                 sx={{ mt: 2 }}
               >
                 Retry

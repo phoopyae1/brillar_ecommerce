@@ -226,7 +226,7 @@ export default function OrdersPage() {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
           <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: "1.75rem", sm: "2rem" } }}>
             Your Orders
-          </Typography>
+        </Typography>
           <FormControl size="small" sx={{ minWidth: 150 }}>
             <Select
               value={timeFilter}
@@ -323,17 +323,17 @@ export default function OrdersPage() {
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
                       <Box sx={{ flex: 1 }}>
                         <Box sx={{ display: "flex", gap: 2, mb: 1, flexWrap: "wrap" }}>
-                          <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary">
                             <strong>Order Date:</strong> {new Date(order.createdAt).toLocaleDateString("en-US", {
-                              year: "numeric",
+                            year: "numeric",
                               month: "short",
-                              day: "numeric"
-                            })}
-                          </Typography>
+                            day: "numeric"
+                          })}
+                        </Typography>
                           <Typography variant="body2" color="text.secondary">
                             <strong>Total:</strong> {order.currency} {Number(order.total).toFixed(2)}
                           </Typography>
-                        </Box>
+                    </Box>
                         <Typography variant="body2" color="text.secondary">
                           <strong>Order ID:</strong> #{order.id.slice(0, 12).toUpperCase()}
                         </Typography>
@@ -504,7 +504,7 @@ export default function OrdersPage() {
                           </Box>
                         </Box>
                       ))}
-                    </Stack>
+                  </Stack>
                   </Box>
                 </CardContent>
               </Card>

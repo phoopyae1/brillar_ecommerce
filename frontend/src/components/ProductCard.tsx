@@ -63,19 +63,13 @@ export function ProductCard({ product, hideAddToCart = false }: ProductCardProps
     
     window.addEventListener("storage", handleStorageChange);
     
-    // Also check periodically for same-tab changes
-    const interval = setInterval(() => {
-      const currentAuth = isAuthenticated();
-      if (currentAuth !== isLoggedIn) {
-        setIsLoggedIn(currentAuth);
-      }
-    }, 500);
+    // Remove periodic check - only check on storage events
+    // This prevents unnecessary re-renders and API calls
     
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      clearInterval(interval);
     };
-  }, [isLoggedIn]);
+  }, []); // Empty dependency array - only run on mount/unmount
 
   const refreshAccessToken = async (): Promise<string | null> => {
     const refreshToken = localStorage.getItem("refreshToken");

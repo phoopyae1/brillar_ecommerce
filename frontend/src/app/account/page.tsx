@@ -245,26 +245,26 @@ export default function AccountPage() {
                     <CircularProgress />
                   </Box>
                 ) : orders.length === 0 ? (
-                  <Box sx={{ textAlign: "center", py: 4 }}>
-                    <ShoppingBagIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
-                    <Typography variant="h6" fontWeight={500} gutterBottom>
-                      No orders yet
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: "auto" }}>
-                      You haven't placed any orders yet. Start shopping to see your order history here.
-                    </Typography>
-                    <Button 
-                      variant="contained" 
-                      component={Link} 
-                      href="/products"
-                      sx={{
-                        textTransform: "none",
-                        fontWeight: 500
-                      }}
-                    >
-                      Start Shopping
-                    </Button>
-                  </Box>
+                <Box sx={{ textAlign: "center", py: 4 }}>
+                  <ShoppingBagIcon sx={{ fontSize: 64, color: "text.disabled", mb: 2 }} />
+                  <Typography variant="h6" fontWeight={500} gutterBottom>
+                    No orders yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: "auto" }}>
+                    You haven't placed any orders yet. Start shopping to see your order history here.
+                  </Typography>
+                  <Button 
+                    variant="contained" 
+                    component={Link} 
+                    href="/products"
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 500
+                    }}
+                  >
+                    Start Shopping
+                  </Button>
+                </Box>
                 ) : (
                   <Box>
                     <Typography variant="h6" fontWeight={500} gutterBottom sx={{ mb: 3 }}>

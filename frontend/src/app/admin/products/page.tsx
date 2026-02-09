@@ -318,18 +318,18 @@ export default function AdminProductsPage() {
       setIsEditing(true);
       setAddProductOpen(true);
       console.log("Edit dialog opened successfully");
-      } catch (error: any) {
-        console.error("Error fetching product:", error);
-        const errorMessage = error.message || "Failed to load product for editing";
+    } catch (error: any) {
+      console.error("Error fetching product:", error);
+      const errorMessage = error.message || "Failed to load product for editing";
         showToast(`${errorMessage}. Please check the console for details.`, "error");
-        setSelectedId(null);
-      }
+      setSelectedId(null);
+    }
   };
 
   const handleDelete = async () => {
     const productIdToDelete = selectedId;
     if (!productIdToDelete) {
-      handleMenuClose();
+    handleMenuClose();
       return;
     }
 
@@ -424,7 +424,7 @@ export default function AdminProductsPage() {
         const newImages = [...prev.images, finalUrl];
         console.log("Updated images array:", newImages);
         return {
-          ...prev,
+        ...prev,
           images: newImages
         };
       });
@@ -572,7 +572,7 @@ export default function AdminProductsPage() {
         const newImages = [...prev.images, ...uploadedUrls];
         console.log("Updated images array:", newImages);
         return {
-          ...prev,
+        ...prev,
           images: newImages
         };
       });
@@ -717,7 +717,7 @@ export default function AdminProductsPage() {
       // If editing, update inventory (create if doesn't exist)
       // If creating new product, verify/update inventory was created correctly
       let inventoryUpdateSuccess = true;
-      const currentStock = parseInt(formData.stock) || 0;
+        const currentStock = parseInt(formData.stock) || 0;
       
       if (currentStock > 0) {
         const productIdToUpdate = isEditing ? selectedId : newProductId;

@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import { LoginSchema } from "@brillar/shared";
+import { loginAtenxionUser } from "../../utils/atenxion";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -71,6 +72,21 @@ export default function LoginPage() {
         localStorage.setItem("accessToken", data.accessToken);
         localStorage.setItem("refreshToken", data.refreshToken);
         localStorage.setItem("user", JSON.stringify(data.user));
+
+        // Call Atenxion login based on user role
+        try {
+          const userRole = data.user.role === "ADMIN" ? "admin" : "user";
+          console.log("userrole", userRole);
+          await loginAtenxionUser(
+            {
+              userId: data.user.id
+            },
+            userRole
+          );
+        } catch (error) {
+          // Don't block login if Atenxion fails
+          console.error("Atenxion login error (non-blocking):", error);
+        }
 
         // Redirect based on redirect URL, user role, or default
         if (redirectUrl) {
