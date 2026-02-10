@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Box,
@@ -19,22 +19,12 @@ import { loginAtenxionUser } from "../../utils/atenxion";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-export default function LoginPage() {
+function LoginForm({ redirectUrl }: { redirectUrl: string | null }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
-  const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
-
-  // Get redirect URL from query params
-  React.useEffect(() => {
-    const redirect = searchParams.get("redirect");
-    if (redirect) {
-      setRedirectUrl(redirect);
-    }
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,5 +196,47 @@ export default function LoginPage() {
         </Card>
       </Container>
     </Box>
+  );
+}
+
+function LoginPageContent() {
+  const searchParams = useSearchParams();
+  const [redirectUrl, setRedirectUrl] = React.useState<string | null>(null);
+
+  // Get redirect URL from query params
+  React.useEffect(() => {
+    const redirect = searchParams.get("redirect");
+    if (redirect) {
+      setRedirectUrl(redirect);
+    }
+  }, [searchParams]);
+
+  return <LoginForm redirectUrl={redirectUrl} />;
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <Box
+        sx={{
+          backgroundColor: "background.default",
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          py: 8
+        }}
+      >
+        <Container maxWidth="sm">
+          <Card sx={{ borderRadius: 3, boxShadow: "0px 12px 24px rgba(15, 23, 42, 0.08)" }}>
+            <CardContent sx={{ p: 4, textAlign: "center" }}>
+              <Typography>Loading...</Typography>
+            </CardContent>
+          </Card>
+        </Container>
+      </Box>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }

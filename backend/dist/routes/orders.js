@@ -11,48 +11,159 @@ const inventoryService_1 = require("../services/inventoryService");
 exports.ordersRouter = (0, express_1.Router)();
 exports.ordersRouter.get("/", auth_1.authenticate, async (req, res) => {
     const userId = req.user.id;
+    const userEmail = req.user.email;
     console.log("=== Fetching Orders ===");
-    console.log("User ID from token:", userId);
-    console.log("User ID type:", typeof userId);
-    console.log("User email from token:", req.user.email);
-    // Also check if there are ANY orders in the database (for debugging)
-    const allOrdersCount = await prisma_1.prisma.order.count();
-    console.log("Total orders in database:", allOrdersCount);
-    if (allOrdersCount > 0) {
-        const sampleOrder = await prisma_1.prisma.order.findFirst({
-            include: { items: true }
-        });
-        console.log("Sample order from database:", {
-            id: sampleOrder?.id,
-            userId: sampleOrder?.userId,
-            userIdType: typeof sampleOrder?.userId,
-            total: sampleOrder?.total,
-            createdAt: sampleOrder?.createdAt
-        });
-        console.log("User ID match check:", {
-            tokenUserId: userId,
-            orderUserId: sampleOrder?.userId,
-            match: userId === sampleOrder?.userId,
-            strictEqual: userId === sampleOrder?.userId,
-            looseEqual: userId == sampleOrder?.userId
-        });
-    }
-    const orders = await prisma_1.prisma.order.findMany({
+    console.log("User ID from token:", userId, "Type:", typeof userId);
+    console.log("User email from token:", userEmail);
+    // Strategy 1: Try to find orders by userId (normal case)
+    let orders = await prisma_1.prisma.order.findMany({
         where: { userId },
         include: { items: true },
         orderBy: { createdAt: "desc" }
     });
-    console.log(`Found ${orders.length} orders for user ${userId}`);
+    // Fetch product details for each order item
+    for (const order of orders) {
+        for (const item of order.items) {
+            if (item.productId) {
+                const product = await prisma_1.prisma.product.findUnique({
+                    where: { id: item.productId },
+                    select: { id: true, name: true, images: true, slug: true }
+                });
+                item.product = product;
+            }
+        }
+    }
+    console.log(`Strategy 1: Found ${orders.length} orders for user ID: ${userId}`);
+    // Strategy 2: If no orders found, try to find by email (more reliable)
+    if (orders.length === 0 && userEmail) {
+        console.log("Strategy 2: No orders by userId, trying to find by email:", userEmail);
+        // Find user by email first
+        const userByEmail = await prisma_1.prisma.user.findUnique({
+            where: { email: userEmail }
+        });
+        if (userByEmail) {
+            console.log(`Found user by email. User ID: ${userByEmail.id}, Token User ID: ${userId}`);
+            // Get orders for this user (by their actual userId in database)
+            const ordersByEmailUser = await prisma_1.prisma.order.findMany({
+                where: { userId: userByEmail.id },
+                include: { items: true },
+                orderBy: { createdAt: "desc" }
+            });
+            // Fetch product details for each order item
+            for (const order of ordersByEmailUser) {
+                for (const item of order.items) {
+                    if (item.productId) {
+                        const product = await prisma_1.prisma.product.findUnique({
+                            where: { id: item.productId },
+                            select: { id: true, name: true, images: true, slug: true }
+                        });
+                        item.product = product;
+                    }
+                }
+            }
+            console.log(`Found ${ordersByEmailUser.length} orders for user ID ${userByEmail.id}`);
+            if (ordersByEmailUser.length > 0) {
+                // If userIds don't match, update orders to use current userId from token
+                if (userByEmail.id !== userId) {
+                    console.log("⚠️ User ID mismatch! Updating orders...");
+                    console.log(`  Database user ID: ${userByEmail.id}`);
+                    console.log(`  Token user ID: ${userId}`);
+                    await prisma_1.prisma.order.updateMany({
+                        where: { userId: userByEmail.id },
+                        data: { userId: userId }
+                    });
+                    console.log(`✓ Updated ${ordersByEmailUser.length} orders to use userId: ${userId}`);
+                }
+                orders = ordersByEmailUser;
+            }
+        }
+        else {
+            console.log("⚠️ No user found with email:", userEmail);
+        }
+    }
+    // Strategy 3: Direct query by email using join (last resort)
+    if (orders.length === 0 && userEmail) {
+        console.log("Strategy 3: Trying direct query with user email join...");
+        // Use raw query to find orders by email
+        const ordersByEmail = await prisma_1.prisma.$queryRaw `
+      SELECT o.* FROM "Order" o
+      INNER JOIN "User" u ON o."userId" = u.id
+      WHERE u.email = ${userEmail}
+      ORDER BY o."createdAt" DESC
+    `;
+        if (ordersByEmail && ordersByEmail.length > 0) {
+            console.log(`Found ${ordersByEmail.length} orders via raw query`);
+            // Get full order details with items
+            const orderIds = ordersByEmail.map((o) => o.id);
+            orders = await prisma_1.prisma.order.findMany({
+                where: { id: { in: orderIds } },
+                include: { items: true },
+                orderBy: { createdAt: "desc" }
+            });
+            // Fetch product details for each order item
+            for (const order of orders) {
+                for (const item of order.items) {
+                    if (item.productId) {
+                        const product = await prisma_1.prisma.product.findUnique({
+                            where: { id: item.productId },
+                            select: { id: true, name: true, images: true, slug: true }
+                        });
+                        item.product = product;
+                    }
+                }
+            }
+            // Update orders to use correct userId
+            if (orders.length > 0 && orders[0].userId !== userId) {
+                console.log("Updating orders to use correct userId...");
+                await prisma_1.prisma.order.updateMany({
+                    where: { id: { in: orderIds } },
+                    data: { userId: userId }
+                });
+                console.log("✓ Orders updated");
+            }
+        }
+    }
+    // Debug: Check total orders in database
+    if (orders.length === 0) {
+        const allOrdersCount = await prisma_1.prisma.order.count();
+        console.log(`Total orders in database: ${allOrdersCount}`);
+        if (allOrdersCount > 0) {
+            const sampleOrders = await prisma_1.prisma.order.findMany({
+                take: 5,
+                select: {
+                    id: true,
+                    userId: true,
+                    createdAt: true
+                },
+                orderBy: { createdAt: "desc" }
+            });
+            // Get user emails for these orders
+            const userIds = [...new Set(sampleOrders.map(o => o.userId))];
+            const users = await prisma_1.prisma.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, email: true }
+            });
+            const ordersWithUsers = sampleOrders.map(order => ({
+                ...order,
+                userEmail: users.find(u => u.id === order.userId)?.email || "unknown"
+            }));
+            console.log("Sample orders:", JSON.stringify(ordersWithUsers, null, 2));
+            console.warn("⚠️ Orders exist but none match current user!");
+        }
+    }
+    // Final logging
     if (orders.length > 0) {
-        console.log("First matching order:", {
+        console.log(`✓ SUCCESS: Returning ${orders.length} orders`);
+        console.log("First order:", {
             id: orders[0].id,
             userId: orders[0].userId,
             total: orders[0].total,
+            itemsCount: orders[0].items.length,
             createdAt: orders[0].createdAt
         });
     }
     else {
-        console.warn("No orders found for user ID:", userId);
+        console.warn("✗ FAILED: No orders found for user");
     }
     console.log("========================");
     res.json(orders);
@@ -64,6 +175,16 @@ exports.ordersRouter.get("/:id", auth_1.authenticate, async (req, res) => {
     });
     if (!order) {
         return res.status(404).json({ message: "Order not found" });
+    }
+    // Fetch product details for each order item
+    for (const item of order.items) {
+        if (item.productId) {
+            const product = await prisma_1.prisma.product.findUnique({
+                where: { id: item.productId },
+                select: { id: true, name: true, images: true, slug: true }
+            });
+            item.product = product;
+        }
     }
     res.json(order);
 });
@@ -99,13 +220,13 @@ exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.valid
             include: { items: true }
         });
     }
-    if (!cart || cart.items.length === 0) {
+    if (!cart || cart?.items.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });
     }
     const order = await prisma_1.prisma.$transaction(async (tx) => {
         let total = 0;
         const orderItems = [];
-        for (const item of cart.items) {
+        for (const item of cart?.items || []) {
             const product = await tx.product.findUnique({
                 where: { id: item.productId }
             });
@@ -141,7 +262,7 @@ exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.valid
                     inventoryId: inventory.id,
                     type: "OUT",
                     quantity: item.quantity,
-                    reference: `order:${cart.id}`,
+                    reference: `order:${cart?.id}`,
                     createdBy: req.user?.id
                 }
             });
@@ -174,7 +295,7 @@ exports.ordersRouter.post("/checkout", auth_1.authenticate, (0, validate_1.valid
             total: created.total,
             itemsCount: created.items.length
         });
-        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        await tx.cartItem.deleteMany({ where: { cartId: cart?.id } });
         return created;
     });
     res.status(201).json(order);

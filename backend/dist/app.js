@@ -21,6 +21,7 @@ const cart_1 = require("./routes/cart");
 const orders_1 = require("./routes/orders");
 const admin_1 = require("./routes/admin");
 const upload_1 = require("./routes/upload");
+const integration_1 = require("./routes/integration");
 const error_handler_1 = require("./middleware/error-handler");
 exports.app = (0, express_1.default)();
 // Configure helmet to allow images
@@ -37,8 +38,15 @@ exports.app.use((0, cors_1.default)({ origin: config_1.config.corsOrigin, creden
 exports.app.use(express_1.default.json());
 exports.app.use((0, morgan_1.default)("combined"));
 exports.app.use((0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000,
-    max: 200
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Increased limit for development/production
+    message: "Too many requests, please try again later.",
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => {
+        // Skip rate limiting for health checks
+        return req.path === "/health";
+    }
 }));
 const swaggerSpec = (0, swagger_jsdoc_1.default)({
     definition: {
@@ -73,4 +81,5 @@ exports.app.use("/api/cart", cart_1.cartRouter);
 exports.app.use("/api/orders", orders_1.ordersRouter);
 exports.app.use("/api/admin", admin_1.adminRouter);
 exports.app.use("/api/upload", upload_1.uploadRouter);
+exports.app.use("/api/integration", integration_1.integrationRouter);
 exports.app.use(error_handler_1.errorHandler);

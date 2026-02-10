@@ -583,7 +583,7 @@ export default function AdminOrdersPage() {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          {...(statusIcon && { icon: statusIcon })}
+                          icon={statusIcon}
                           label={order.status}
                           color={getStatusColor(order.status) as any}
                           size="small"
