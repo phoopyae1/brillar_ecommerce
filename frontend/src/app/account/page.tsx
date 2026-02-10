@@ -23,6 +23,27 @@ import { logout, getUser, isAuthenticated } from "../../utils/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+const getStatusText = (status: string) => {
+  switch (status) {
+    case "FULFILLED":
+      return "Shipped";
+    case "READY_TO_SHIP":
+      return "Ready to Ship";
+    case "PREPARING_TO_SHIP":
+      return "Preparing to Ship";
+    case "PAID":
+      return "Order Confirmed";
+    case "PENDING":
+      return "Processing";
+    case "CANCELLED":
+      return "Cancelled";
+    case "REFUNDED":
+      return "Refunded";
+    default:
+      return status;
+  }
+};
+
 export default function AccountPage() {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
@@ -303,10 +324,13 @@ export default function AccountPage() {
                               </Box>
                               <Box sx={{ textAlign: "right" }}>
                                 <Typography variant="h6" fontWeight={600} color="primary.main">
-                                  ${Number(order.total).toFixed(2)}
+                                  ${(Number(order.total) * 1.1).toFixed(2)}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                                  (includes tax)
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                  {order.status}
+                                  {getStatusText(order.status)}
                                 </Typography>
                               </Box>
                             </Box>

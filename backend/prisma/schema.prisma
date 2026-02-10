@@ -20,6 +20,8 @@ enum ProductStatus {
 enum OrderStatus {
   PENDING
   PAID
+  PREPARING_TO_SHIP
+  READY_TO_SHIP
   CANCELLED
   FULFILLED
   REFUNDED

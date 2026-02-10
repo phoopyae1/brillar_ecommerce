@@ -199,6 +199,8 @@ export default function CartPage() {
     );
   }
 
+  const TAX_RATE = 0.1; // 10% tax rate
+  
   const subtotal = cartItems.reduce((sum, item) => {
     if (!item.product) {
       console.warn("Cart item missing product data:", item);
@@ -208,7 +210,7 @@ export default function CartPage() {
     return sum + price * item.quantity;
   }, 0);
   const shipping: number = 0;
-  const tax = subtotal * 0.1;
+  const tax = subtotal * TAX_RATE;
   const total = subtotal + shipping + tax;
 
   return (
@@ -310,10 +312,13 @@ export default function CartPage() {
                                   </IconButton>
                                 </Tooltip>
                                 <Typography variant="h6" fontWeight={700} color="primary.main">
-                                  ${(price * item.quantity).toFixed(2)}
+                                  ${((price * item.quantity) * (1 + TAX_RATE)).toFixed(2)}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                   ${price.toFixed(2)} each
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                                  ${(price * item.quantity).toFixed(2)} + ${((price * item.quantity) * TAX_RATE).toFixed(2)} tax
                                 </Typography>
                               </Box>
                             </Stack>
@@ -336,7 +341,7 @@ export default function CartPage() {
                 <Divider sx={{ my: 2 }} />
                 <Stack spacing={2}>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <Typography color="text.secondary">Subtotal</Typography>
+                    <Typography color="text.secondary">Subtotal (before tax)</Typography>
                     <Typography fontWeight={600}>${subtotal.toFixed(2)}</Typography>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
@@ -346,18 +351,21 @@ export default function CartPage() {
                     </Typography>
                   </Box>
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                    <Typography color="text.secondary">Tax</Typography>
+                    <Typography color="text.secondary">Tax (10%)</Typography>
                     <Typography fontWeight={600}>${tax.toFixed(2)}</Typography>
                   </Box>
                   <Divider />
                   <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                     <Typography variant="h6" fontWeight={700}>
-                      Total
+                      Total (including tax)
                     </Typography>
                     <Typography variant="h6" fontWeight={700} color="primary.main">
                       ${total.toFixed(2)}
                     </Typography>
                   </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", mt: 1 }}>
+                    All amounts include applicable taxes
+                  </Typography>
                 </Stack>
                 <Tooltip 
                   title={cartItems.length === 0 ? "Add items to cart first" : "Complete your purchase"} 

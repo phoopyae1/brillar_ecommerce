@@ -9,6 +9,8 @@ export type ProductStatus = z.infer<typeof ProductStatusEnum>;
 export const OrderStatusEnum = z.enum([
   "PENDING",
   "PAID",
+  "PREPARING_TO_SHIP",
+  "READY_TO_SHIP",
   "CANCELLED",
   "FULFILLED",
   "REFUNDED"

@@ -16,17 +16,30 @@ import {
   MenuItem,
   FormControl,
   Avatar,
-  IconButton
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
+  Grid,
+  Chip
 } from "@mui/material";
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import PendingIcon from "@mui/icons-material/Pending";
+import CloseIcon from "@mui/icons-material/Close";
+import PrintIcon from "@mui/icons-material/Print";
+import DownloadIcon from "@mui/icons-material/Download";
 import Link from "next/link";
 import { isAuthenticated } from "../../../utils/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const TAX_RATE = 0.1; // 10% tax rate
 
 type OrderItem = {
   id: string;
@@ -54,13 +67,19 @@ type Order = {
 const getStatusText = (status: string) => {
   switch (status) {
     case "FULFILLED":
-      return "Delivered";
-    case "PAID":
       return "Shipped";
+    case "READY_TO_SHIP":
+      return "Ready to Ship";
+    case "PREPARING_TO_SHIP":
+      return "Preparing to Ship";
+    case "PAID":
+      return "Order Confirmed";
     case "PENDING":
       return "Processing";
     case "CANCELLED":
       return "Cancelled";
+    case "REFUNDED":
+      return "Refunded";
     default:
       return status;
   }
@@ -70,14 +89,41 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case "FULFILLED":
       return "#10b981"; // green
+    case "READY_TO_SHIP":
+      return "#06b6d4"; // cyan/blue
+    case "PREPARING_TO_SHIP":
+      return "#f59e0b"; // amber/orange
     case "PAID":
       return "#3b82f6"; // blue
     case "PENDING":
       return "#f59e0b"; // amber
     case "CANCELLED":
       return "#ef4444"; // red
+    case "REFUNDED":
+      return "#8b5cf6"; // purple
     default:
       return "#6b7280"; // gray
+  }
+};
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case "FULFILLED":
+      return <LocalShippingIcon sx={{ fontSize: 20 }} />;
+    case "READY_TO_SHIP":
+      return <LocalShippingIcon sx={{ fontSize: 20 }} />;
+    case "PREPARING_TO_SHIP":
+      return <InventoryIcon sx={{ fontSize: 20 }} />;
+    case "PAID":
+      return <CheckCircleIcon sx={{ fontSize: 20 }} />;
+    case "PENDING":
+      return <PendingIcon sx={{ fontSize: 20 }} />;
+    case "CANCELLED":
+      return <CloseIcon sx={{ fontSize: 20 }} />;
+    case "REFUNDED":
+      return <RefreshIcon sx={{ fontSize: 20 }} />;
+    default:
+      return <CheckCircleIcon sx={{ fontSize: 20 }} />;
   }
 };
 
@@ -88,6 +134,23 @@ export default function OrdersPage() {
   const [error, setError] = React.useState("");
   const [activeTab, setActiveTab] = React.useState(0);
   const [timeFilter, setTimeFilter] = React.useState("1");
+  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null);
+  const [orderDialogOpen, setOrderDialogOpen] = React.useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = React.useState(false);
+
+  const handleViewOrder = (order: Order) => {
+    setSelectedOrder(order);
+    setOrderDialogOpen(true);
+  };
+
+  const handleViewInvoice = (order: Order) => {
+    setSelectedOrder(order);
+    setInvoiceDialogOpen(true);
+  };
+
+  const handlePrintInvoice = () => {
+    window.print();
+  };
 
   const refreshAccessToken = async (): Promise<string | null> => {
     const refreshToken = localStorage.getItem("refreshToken");
@@ -184,8 +247,13 @@ export default function OrdersPage() {
 
     // Filter by tab
     if (activeTab === 1) {
-      // Not Yet Shipped
-      filtered = filtered.filter(o => o.status === "PAID" || o.status === "PENDING");
+      // Not Yet Shipped - includes orders being prepared or ready to ship
+      filtered = filtered.filter(o => 
+        o.status === "PAID" || 
+        o.status === "PENDING" || 
+        o.status === "PREPARING_TO_SHIP" || 
+        o.status === "READY_TO_SHIP"
+      );
     } else if (activeTab === 2) {
       // Cancelled Orders
       filtered = filtered.filter(o => o.status === "CANCELLED");
@@ -269,7 +337,7 @@ export default function OrdersPage() {
             }}
           >
             <Tab label={`Order (${orders.length})`} />
-            <Tab label={`Not Yet Shipped (${orders.filter(o => o.status === "PAID" || o.status === "PENDING").length})`} />
+            <Tab label={`Not Yet Shipped (${orders.filter(o => o.status === "PAID" || o.status === "PENDING" || o.status === "PREPARING_TO_SHIP" || o.status === "READY_TO_SHIP").length})`} />
             <Tab label={`Cancelled Orders (${orders.filter(o => o.status === "CANCELLED").length})`} />
           </Tabs>
         </Box>
@@ -331,7 +399,7 @@ export default function OrdersPage() {
                           })}
                         </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            <strong>Total:</strong> {order.currency} {Number(order.total).toFixed(2)}
+                            <strong>Total:</strong> {order.currency} {(Number(order.total) * (1 + TAX_RATE)).toFixed(2)} <Typography component="span" variant="caption" color="text.secondary">(includes tax)</Typography>
                           </Typography>
                     </Box>
                         <Typography variant="body2" color="text.secondary">
@@ -342,6 +410,7 @@ export default function OrdersPage() {
                         <Button
                           variant="outlined"
                           size="small"
+                          onClick={() => handleViewInvoice(order)}
                           sx={{
                             textTransform: "none",
                             borderColor: "#d1d5db",
@@ -357,6 +426,7 @@ export default function OrdersPage() {
                         <Button
                           variant="contained"
                           size="small"
+                          onClick={() => handleViewOrder(order)}
                           sx={{
                             textTransform: "none",
                             bgcolor: "#2563eb",
@@ -483,12 +553,9 @@ export default function OrdersPage() {
                               gap: 1
                             }}
                           >
-                            <CheckCircleIcon
-                              sx={{
-                                fontSize: 20,
-                                color: getStatusColor(order.status)
-                              }}
-                            />
+                            <Box sx={{ color: getStatusColor(order.status) }}>
+                              {getStatusIcon(order.status)}
+                            </Box>
                             <Typography
                               variant="body2"
                               sx={{
@@ -496,10 +563,11 @@ export default function OrdersPage() {
                                 fontWeight: 500
                               }}
                             >
-                              {getStatusText(order.status)} {order.status === "FULFILLED" && new Date(order.createdAt).toLocaleDateString("en-US", {
+                              {getStatusText(order.status)} {(order.status === "FULFILLED" || order.status === "READY_TO_SHIP" || order.status === "PREPARING_TO_SHIP") && ` on ${new Date(order.createdAt).toLocaleDateString("en-US", {
                                 month: "long",
-                                day: "numeric"
-                              })}
+                                day: "numeric",
+                                year: "numeric"
+                              })}`}
                             </Typography>
                           </Box>
                         </Box>
@@ -512,6 +580,230 @@ export default function OrdersPage() {
           </Stack>
         )}
       </Container>
+
+      {/* Order Details Dialog */}
+      <Dialog
+        open={orderDialogOpen}
+        onClose={() => setOrderDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Typography variant="h6">Order Details</Typography>
+          <IconButton onClick={() => setOrderDialogOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrder && (
+            <Box>
+              <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Order ID</Typography>
+                  <Typography variant="body1" fontWeight={500}>
+                    #{selectedOrder.id.slice(0, 12).toUpperCase()}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Order Date</Typography>
+                  <Typography variant="body1" fontWeight={500}>
+                    {new Date(selectedOrder.createdAt).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric"
+                    })}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Status</Typography>
+                  <Chip
+                    icon={getStatusIcon(selectedOrder.status)}
+                    label={getStatusText(selectedOrder.status)}
+                    size="small"
+                    sx={{
+                      bgcolor: getStatusColor(selectedOrder.status) + "20",
+                      color: getStatusColor(selectedOrder.status),
+                      border: `1px solid ${getStatusColor(selectedOrder.status)}40`
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">Total Amount</Typography>
+                  <Typography variant="body1" fontWeight={500}>
+                    {selectedOrder.currency} {(Number(selectedOrder.total) * (1 + TAX_RATE)).toFixed(2)}
+                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      (includes tax)
+                    </Typography>
+                  </Typography>
+                </Grid>
+              </Grid>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="h6" sx={{ mb: 2 }}>Order Items</Typography>
+              <Stack spacing={2}>
+                {selectedOrder.items.map((item, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      display: "flex",
+                      gap: 2,
+                      p: 2,
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 1
+                    }}
+                  >
+                    {item.product?.images?.[0] && (
+                      <Avatar
+                        src={item.product.images[0]}
+                        variant="rounded"
+                        sx={{ width: 60, height: 60 }}
+                      />
+                    )}
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body1" fontWeight={500}>
+                        {item.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Quantity: {item.quantity}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Price: {selectedOrder.currency} {Number(item.price).toFixed(2)} each
+                      </Typography>
+                    </Box>
+                    <Typography variant="body1" fontWeight={500}>
+                      {selectedOrder.currency} {(Number(item.price) * item.quantity).toFixed(2)}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+
+              <Box sx={{ mt: 3, p: 2, bgcolor: "#f9fafb", borderRadius: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                  <Typography variant="body2">Subtotal (before tax):</Typography>
+                  <Typography variant="body2">{selectedOrder.currency} {Number(selectedOrder.total).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                  <Typography variant="body2">Tax (10%):</Typography>
+                  <Typography variant="body2">{selectedOrder.currency} {(Number(selectedOrder.total) * TAX_RATE).toFixed(2)}</Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body1" fontWeight={600}>Total:</Typography>
+                  <Typography variant="body1" fontWeight={600}>
+                    {selectedOrder.currency} {(Number(selectedOrder.total) * (1 + TAX_RATE)).toFixed(2)}
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOrderDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invoice Dialog */}
+      <Dialog
+        open={invoiceDialogOpen}
+        onClose={() => setInvoiceDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Typography variant="h6">Invoice</Typography>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <IconButton onClick={handlePrintInvoice} size="small" title="Print">
+              <PrintIcon />
+            </IconButton>
+            <IconButton onClick={() => setInvoiceDialogOpen(false)} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrder && (
+            <Box sx={{ p: 2 }}>
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h5" fontWeight={600} sx={{ mb: 1 }}>
+                  INVOICE
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Order ID: #{selectedOrder.id.slice(0, 12).toUpperCase()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Date: {new Date(selectedOrder.createdAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric"
+                  })}
+                </Typography>
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="h6" sx={{ mb: 2 }}>Items</Typography>
+              <Box sx={{ mb: 3 }}>
+                {selectedOrder.items.map((item, index) => (
+                  <Box
+                    key={index}
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      py: 1.5,
+                      borderBottom: "1px solid #e5e7eb"
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body1" fontWeight={500}>
+                        {item.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {item.quantity} × {selectedOrder.currency} {Number(item.price).toFixed(2)}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body1" fontWeight={500}>
+                      {selectedOrder.currency} {(Number(item.price) * item.quantity).toFixed(2)}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              <Box sx={{ mt: 4, p: 3, bgcolor: "#f9fafb", borderRadius: 1 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                  <Typography variant="body2">Subtotal:</Typography>
+                  <Typography variant="body2">{selectedOrder.currency} {Number(selectedOrder.total).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+                  <Typography variant="body2">Tax (10%):</Typography>
+                  <Typography variant="body2">{selectedOrder.currency} {(Number(selectedOrder.total) * TAX_RATE).toFixed(2)}</Typography>
+                </Box>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="h6" fontWeight={600}>Total:</Typography>
+                  <Typography variant="h6" fontWeight={600}>
+                    {selectedOrder.currency} {(Number(selectedOrder.total) * (1 + TAX_RATE)).toFixed(2)}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ mt: 4, pt: 3, borderTop: "1px solid #e5e7eb" }}>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  Thank you for your purchase!
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handlePrintInvoice} startIcon={<PrintIcon />}>
+            Print
+          </Button>
+          <Button onClick={() => setInvoiceDialogOpen(false)} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
