@@ -82,6 +82,61 @@ export default function CartPage() {
     }
   };
 
+  // Fetch cart function - can be called from multiple places
+  const fetchCart = React.useCallback(async () => {
+    try {
+      let accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        router.push("/login?redirect=/cart");
+        return;
+      }
+
+      // Get or create cart ID from localStorage
+      let storedCartId = localStorage.getItem("cartId");
+      
+      let response = await fetch(`${API_URL}/api/cart`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(storedCartId && { "x-cart-id": storedCartId })
+        }
+      });
+
+      // If token expired, try to refresh it
+      if (response.status === 401) {
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          response = await fetch(`${API_URL}/api/cart`, {
+            headers: {
+              Authorization: `Bearer ${newToken}`,
+              ...(storedCartId && { "x-cart-id": storedCartId })
+            }
+          });
+        } else {
+          router.push("/login?redirect=/cart");
+          return;
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch cart");
+      }
+
+      const data = await response.json();
+      setCartItems(data.items || []);
+      if (data.cartId) {
+        setCartId(data.cartId);
+        localStorage.setItem("cartId", data.cartId);
+      }
+    } catch (err: any) {
+      console.error("Error fetching cart:", err);
+      // Set empty cart on error
+      setCartItems([]);
+    } finally {
+      setLoading(false);
+      setIsChecking(false);
+    }
+  }, [router]);
+
   React.useEffect(() => {
     // Check authentication
     if (!isAuthenticated()) {
@@ -89,64 +144,19 @@ export default function CartPage() {
       return;
     }
 
-    // Fetch cart
-    const fetchCart = async () => {
-      try {
-        let accessToken = localStorage.getItem("accessToken");
-        if (!accessToken) {
-          router.push("/login?redirect=/cart");
-          return;
-        }
-
-        // Get or create cart ID from localStorage
-        let storedCartId = localStorage.getItem("cartId");
-        
-        let response = await fetch(`${API_URL}/api/cart`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            ...(storedCartId && { "x-cart-id": storedCartId })
-          }
-        });
-
-        // If token expired, try to refresh it
-        if (response.status === 401) {
-          const newToken = await refreshAccessToken();
-          if (newToken) {
-            response = await fetch(`${API_URL}/api/cart`, {
-              headers: {
-                Authorization: `Bearer ${newToken}`,
-                ...(storedCartId && { "x-cart-id": storedCartId })
-              }
-            });
-          } else {
-            router.push("/login?redirect=/cart");
-            return;
-          }
-        }
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch cart");
-        }
-
-        const data = await response.json();
-        setCartItems(data.items || []);
-        if (data.cartId) {
-          setCartId(data.cartId);
-          localStorage.setItem("cartId", data.cartId);
-        }
-      } catch (err: any) {
-        console.error("Error fetching cart:", err);
-        // Set empty cart on error
-        setCartItems([]);
-      } finally {
-        setLoading(false);
-        setIsChecking(false);
-      }
-    };
-
     fetchCart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount - router changes shouldn't trigger refetch
+
+  // Listen for cart update events (when items are added from other pages)
+  React.useEffect(() => {
+    const handleCartUpdate = () => {
+      fetchCart();
+    };
+    
+    window.addEventListener("cartUpdated", handleCartUpdate);
+    return () => window.removeEventListener("cartUpdated", handleCartUpdate);
+  }, [fetchCart]);
 
   const handleRemoveItem = async (itemId: string) => {
     try {
