@@ -77,7 +77,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-const getStatusIcon = (status: string) => {
+const getStatusIcon = (status: string): React.ReactElement | undefined => {
   switch (status) {
     case "FULFILLED":
       return <CheckCircleIcon sx={{ fontSize: 18 }} />;
@@ -86,7 +86,7 @@ const getStatusIcon = (status: string) => {
     case "PENDING":
       return <PendingIcon sx={{ fontSize: 18 }} />;
     default:
-      return null;
+      return undefined;
   }
 };
 
@@ -542,7 +542,9 @@ export default function AdminOrdersPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredOrders.map((order) => (
+                  {filteredOrders.map((order) => {
+                    const statusIcon = getStatusIcon(order.status);
+                    return (
                     <TableRow key={order.id} hover>
                       <TableCell>
                         <Typography
@@ -581,7 +583,7 @@ export default function AdminOrdersPage() {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          icon={getStatusIcon(order.status)}
+                          {...(statusIcon && { icon: statusIcon })}
                           label={order.status}
                           color={getStatusColor(order.status) as any}
                           size="small"
@@ -605,7 +607,8 @@ export default function AdminOrdersPage() {
                         </Tooltip>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
