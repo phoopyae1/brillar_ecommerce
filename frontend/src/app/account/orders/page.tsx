@@ -23,7 +23,10 @@ import {
   DialogActions,
   Divider,
   Grid,
-  Chip
+  Chip,
+  Snackbar,
+  Alert,
+  CircularProgress
 } from "@mui/material";
 import ShoppingBagIcon from "@mui/icons-material/ShoppingBag";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
@@ -36,7 +39,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import PrintIcon from "@mui/icons-material/Print";
 import DownloadIcon from "@mui/icons-material/Download";
 import Link from "next/link";
-import { isAuthenticated } from "../../../utils/auth";
+import { isAuthenticated, getUser, fetchWithAuth } from "../../../utils/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const TAX_RATE = 0.1; // 10% tax rate
@@ -137,6 +140,8 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null);
   const [orderDialogOpen, setOrderDialogOpen] = React.useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = React.useState(false);
+  const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" as "success" | "error" | "warning" | "info" });
+  const [buyingAgain, setBuyingAgain] = React.useState<string | null>(null);
 
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
@@ -150,6 +155,69 @@ export default function OrdersPage() {
 
   const handlePrintInvoice = () => {
     window.print();
+  };
+
+  const handleBuyItAgain = async (order: Order) => {
+    const user = getUser();
+    if (!user) {
+      setSnackbar({ open: true, message: "Please log in to add items to cart", severity: "error" });
+      return;
+    }
+
+    setBuyingAgain(order.id);
+    try {
+      const response = await fetchWithAuth(`${API_URL}/api/customer-agent/buy-it-again`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          customerId: user.id,
+          orderId: order.id
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to add items to cart");
+      }
+
+      if (data.success) {
+        const addedCount = data.addedItems || 0;
+        const skippedCount = data.skippedItems || 0;
+        
+        let message = `Added ${addedCount} item${addedCount !== 1 ? 's' : ''} to your cart`;
+        if (skippedCount > 0) {
+          message += `. ${skippedCount} item${skippedCount !== 1 ? 's' : ''} could not be added (out of stock or unavailable)`;
+        }
+        
+        setSnackbar({ 
+          open: true, 
+          message: message, 
+          severity: skippedCount > 0 ? "warning" : "success" 
+        });
+        
+        // Dispatch cart updated event to refresh cart count
+        window.dispatchEvent(new CustomEvent("cartUpdated"));
+        
+        // Optionally redirect to cart after a short delay
+        setTimeout(() => {
+          router.push("/cart");
+        }, 1500);
+      } else {
+        throw new Error("Failed to add items to cart");
+      }
+    } catch (error: any) {
+      console.error("Error buying it again:", error);
+      setSnackbar({ 
+        open: true, 
+        message: error.message || "Failed to add items to cart. Please try again.", 
+        severity: "error" 
+      });
+    } finally {
+      setBuyingAgain(null);
+    }
   };
 
   const refreshAccessToken = async (): Promise<string | null> => {
@@ -509,19 +577,22 @@ export default function OrdersPage() {
                               </Typography>
                               <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                                 <Button
-                                  startIcon={<RefreshIcon />}
+                                  startIcon={buyingAgain === order.id ? <CircularProgress size={16} /> : <RefreshIcon />}
                                   size="small"
-                                  component={Link}
-                                  href={getProductSlug(item)}
+                                  onClick={() => handleBuyItAgain(order)}
+                                  disabled={buyingAgain === order.id}
                                   sx={{
                                     textTransform: "none",
                                     color: "#2563eb",
                                     "&:hover": {
                                       bgcolor: "#eff6ff"
+                                    },
+                                    "&:disabled": {
+                                      color: "#9ca3af"
                                     }
                                   }}
                                 >
-                                  Buy it again
+                                  {buyingAgain === order.id ? "Adding to cart..." : "Buy it again"}
                                 </Button>
                                 <Button
                                   startIcon={<VisibilityIcon />}
@@ -804,6 +875,22 @@ export default function OrdersPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

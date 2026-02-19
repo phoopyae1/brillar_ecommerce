@@ -101,3 +101,101 @@ export async function logout() {
   // Force a hard redirect to clear all state and ensure fresh page load
   window.location.href = "/";
 }
+
+/**
+ * Fetch wrapper that automatically includes access token and refresh token
+ * Automatically handles token refresh if access token is expired
+ * 
+ * @example
+ * // Basic usage
+ * const response = await fetchWithAuth(`${API_URL}/api/admin-agent/update-order-status`, {
+ *   method: "POST",
+ *   body: JSON.stringify({ orderId: "#DB0B9169", status: "preparing to ship" })
+ * });
+ * 
+ * @example
+ * // With custom headers
+ * const response = await fetchWithAuth(`${API_URL}/api/admin-agent/orders-list`, {
+ *   method: "POST",
+ *   headers: { "Custom-Header": "value" },
+ *   body: JSON.stringify({ page: 1, pageSize: 20 })
+ * });
+ */
+export async function fetchWithAuth(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  if (typeof window === "undefined") {
+    throw new Error("fetchWithAuth can only be used in the browser");
+  }
+
+  const accessToken = localStorage.getItem("accessToken");
+  const refreshToken = localStorage.getItem("refreshToken");
+
+  // Prepare headers
+  const headers = new Headers(options.headers);
+  
+  // Add access token to Authorization header
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  // Add refresh token to header (for automatic refresh by backend middleware)
+  if (refreshToken) {
+    headers.set("X-Refresh-Token", refreshToken);
+  }
+
+  // Ensure Content-Type is set for JSON requests
+  if (!headers.has("Content-Type") && (options.method === "POST" || options.method === "PUT" || options.method === "PATCH")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  // Prepare body - if it's JSON and refresh token exists, add it to the body as well
+  // (backend checks both header and body for refresh token)
+  let body = options.body;
+  if (refreshToken && body && typeof body === "string") {
+    try {
+      const bodyObj = JSON.parse(body);
+      // Only add refreshToken if not already present
+      if (!bodyObj.refreshToken) {
+        bodyObj.refreshToken = refreshToken;
+        body = JSON.stringify(bodyObj);
+      }
+    } catch {
+      // If body is not JSON, keep it as is (header will be used)
+    }
+  }
+
+  // Make the request
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    body: body || options.body
+  });
+
+  // Check if we got a new access token in the response header
+  // This happens when the backend middleware automatically refreshed the token
+  const newAccessToken = response.headers.get("X-New-Access-Token");
+  if (newAccessToken) {
+    localStorage.setItem("accessToken", newAccessToken);
+    console.log("Access token refreshed automatically");
+  }
+
+  return response;
+}
+
+/**
+ * Get the current access token
+ */
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("accessToken");
+}
+
+/**
+ * Get the current refresh token
+ */
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("refreshToken");
+}

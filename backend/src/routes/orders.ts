@@ -20,10 +20,10 @@ ordersRouter.get("/", authenticate, async (req, res) => {
   let orders;
   try {
     orders = await prisma.order.findMany({
-      where: { userId },
-      include: { items: true },
-      orderBy: { createdAt: "desc" }
-    });
+    where: { userId },
+    include: { items: true },
+    orderBy: { createdAt: "desc" }
+  });
   } catch (prismaError: any) {
     // If Prisma client doesn't recognize new enum values, use raw SQL
     if (prismaError.message?.includes("not found in enum") || prismaError.code === "P2003") {
@@ -93,10 +93,10 @@ ordersRouter.get("/", authenticate, async (req, res) => {
       let ordersByEmailUser;
       try {
         ordersByEmailUser = await prisma.order.findMany({
-          where: { userId: userByEmail.id },
-          include: { items: true },
-          orderBy: { createdAt: "desc" }
-        });
+        where: { userId: userByEmail.id },
+        include: { items: true },
+        orderBy: { createdAt: "desc" }
+      });
       } catch (prismaError: any) {
         // If Prisma client doesn't recognize new enum values, use raw SQL
         if (prismaError.message?.includes("not found in enum") || prismaError.code === "P2003") {
@@ -443,7 +443,7 @@ ordersRouter.patch(
   requireRole("ADMIN"),
   async (req, res) => {
     try {
-      const { status } = req.body as { status: string };
+    const { status } = req.body as { status: string };
       
       // Validate status
       const validStatuses = ["PENDING", "PAID", "PREPARING_TO_SHIP", "READY_TO_SHIP", "CANCELLED", "FULFILLED", "REFUNDED"];
@@ -453,56 +453,56 @@ ordersRouter.patch(
         });
       }
 
-      const order = await prisma.order.findUnique({
-        where: { id: req.params.id },
-        include: { items: true }
-      });
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true }
+    });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
 
-      if (["CANCELLED", "REFUNDED"].includes(status)) {
-        await prisma.$transaction(async (tx) => {
-          for (const item of order.items) {
-            const inventory = await tx.inventory.findFirst({
-              where: {
-                productId: item.variantId ? undefined : item.productId,
-                variantId: item.variantId ?? undefined
-              }
-            });
-            if (!inventory) {
-              continue;
+    if (["CANCELLED", "REFUNDED"].includes(status)) {
+      await prisma.$transaction(async (tx) => {
+        for (const item of order.items) {
+          const inventory = await tx.inventory.findFirst({
+            where: {
+              productId: item.variantId ? undefined : item.productId,
+              variantId: item.variantId ?? undefined
             }
-            const adjustment = adjustInventory(inventory, item.quantity);
-            await tx.inventory.update({
-              where: { id: inventory.id },
-              data: {
-                quantityReserved: adjustment.quantityReserved,
-                quantityOnHand: adjustment.quantityOnHand
-              }
-            });
-            await tx.inventoryMovement.create({
-              data: {
-                inventoryId: inventory.id,
-                type: "IN",
-                quantity: item.quantity,
-                reference: `order:${order.id}`,
-                createdBy: req.user?.id
-              }
-            });
+          });
+          if (!inventory) {
+            continue;
           }
-        });
-      }
+          const adjustment = adjustInventory(inventory, item.quantity);
+          await tx.inventory.update({
+            where: { id: inventory.id },
+            data: {
+              quantityReserved: adjustment.quantityReserved,
+              quantityOnHand: adjustment.quantityOnHand
+            }
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              inventoryId: inventory.id,
+              type: "IN",
+              quantity: item.quantity,
+              reference: `order:${order.id}`,
+              createdBy: req.user?.id
+            }
+          });
+        }
+      });
+    }
 
       console.log(`Updating order ${order.id} status from ${order.status} to ${status}`);
       
       // Use raw query if Prisma enum doesn't support the status yet
       // This allows the update to work even if Prisma client hasn't been regenerated
       try {
-        const updated = await prisma.order.update({
-          where: { id: order.id },
-          data: { status: status as OrderStatus }
-        });
+    const updated = await prisma.order.update({
+      where: { id: order.id },
+      data: { status: status as OrderStatus }
+    });
         console.log(`Order status updated successfully:`, updated);
         res.json(updated);
       } catch (prismaError: any) {
@@ -524,7 +524,7 @@ ordersRouter.patch(
               where: { id: order.id }
             });
             console.log(`Order status updated via raw SQL:`, updated);
-            res.json(updated);
+    res.json(updated);
           } catch (rawSqlError: any) {
             console.error("Raw SQL update also failed:", rawSqlError);
             throw new Error(`Failed to update order status. The status "${status}" may not exist in the database enum. Please run migrations: npx prisma migrate deploy && npx prisma generate`);

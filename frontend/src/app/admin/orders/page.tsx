@@ -794,8 +794,8 @@ export default function AdminOrdersPage() {
                             <>
                               <Tooltip title="Mark as Preparing to Ship" arrow>
                                 <span>
-                                  <IconButton
-                                    size="small"
+                          <IconButton
+                            size="small"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       console.log("Preparing to Ship clicked for order:", order.id);
@@ -879,11 +879,11 @@ export default function AdminOrdersPage() {
                                   zIndex: 11,
                                   cursor: "pointer"
                                 }}
-                              >
-                                <MoreVertIcon />
-                              </IconButton>
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
                             </span>
-                          </Tooltip>
+                        </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -971,8 +971,8 @@ export default function AdminOrdersPage() {
                       return <em style={{ color: "#999" }}>Select a status</em>;
                     }
                     return getStatusText(selectedValue);
-                  }}
-                >
+                }}
+              >
                   <MenuItem value="PENDING">Processing</MenuItem>
                   <MenuItem value="PAID">Order Confirmed</MenuItem>
                   <MenuItem value="PREPARING_TO_SHIP">Preparing to Ship</MenuItem>

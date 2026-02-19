@@ -84,57 +84,57 @@ export default function CartPage() {
 
   // Fetch cart function - can be called from multiple places
   const fetchCart = React.useCallback(async () => {
-    try {
-      let accessToken = localStorage.getItem("accessToken");
-      if (!accessToken) {
-        router.push("/login?redirect=/cart");
-        return;
-      }
-
-      // Get or create cart ID from localStorage
-      let storedCartId = localStorage.getItem("cartId");
-      
-      let response = await fetch(`${API_URL}/api/cart`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          ...(storedCartId && { "x-cart-id": storedCartId })
-        }
-      });
-
-      // If token expired, try to refresh it
-      if (response.status === 401) {
-        const newToken = await refreshAccessToken();
-        if (newToken) {
-          response = await fetch(`${API_URL}/api/cart`, {
-            headers: {
-              Authorization: `Bearer ${newToken}`,
-              ...(storedCartId && { "x-cart-id": storedCartId })
-            }
-          });
-        } else {
+      try {
+        let accessToken = localStorage.getItem("accessToken");
+        if (!accessToken) {
           router.push("/login?redirect=/cart");
           return;
         }
-      }
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch cart");
-      }
+        // Get or create cart ID from localStorage
+        let storedCartId = localStorage.getItem("cartId");
+        
+        let response = await fetch(`${API_URL}/api/cart`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(storedCartId && { "x-cart-id": storedCartId })
+          }
+        });
 
-      const data = await response.json();
-      setCartItems(data.items || []);
-      if (data.cartId) {
-        setCartId(data.cartId);
-        localStorage.setItem("cartId", data.cartId);
+        // If token expired, try to refresh it
+        if (response.status === 401) {
+          const newToken = await refreshAccessToken();
+          if (newToken) {
+            response = await fetch(`${API_URL}/api/cart`, {
+              headers: {
+                Authorization: `Bearer ${newToken}`,
+                ...(storedCartId && { "x-cart-id": storedCartId })
+              }
+            });
+          } else {
+            router.push("/login?redirect=/cart");
+            return;
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch cart");
+        }
+
+        const data = await response.json();
+        setCartItems(data.items || []);
+        if (data.cartId) {
+          setCartId(data.cartId);
+          localStorage.setItem("cartId", data.cartId);
+        }
+      } catch (err: any) {
+        console.error("Error fetching cart:", err);
+        // Set empty cart on error
+        setCartItems([]);
+      } finally {
+        setLoading(false);
+        setIsChecking(false);
       }
-    } catch (err: any) {
-      console.error("Error fetching cart:", err);
-      // Set empty cart on error
-      setCartItems([]);
-    } finally {
-      setLoading(false);
-      setIsChecking(false);
-    }
   }, [router]);
 
   React.useEffect(() => {
@@ -200,7 +200,7 @@ export default function CartPage() {
   }
 
   const TAX_RATE = 0.1; // 10% tax rate
-  
+
   const subtotal = cartItems.reduce((sum, item) => {
     if (!item.product) {
       console.warn("Cart item missing product data:", item);
