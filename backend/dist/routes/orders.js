@@ -16,11 +16,50 @@ exports.ordersRouter.get("/", auth_1.authenticate, async (req, res) => {
     console.log("User ID from token:", userId, "Type:", typeof userId);
     console.log("User email from token:", userEmail);
     // Strategy 1: Try to find orders by userId (normal case)
-    let orders = await prisma_1.prisma.order.findMany({
-        where: { userId },
-        include: { items: true },
-        orderBy: { createdAt: "desc" }
-    });
+    let orders;
+    try {
+        orders = await prisma_1.prisma.order.findMany({
+            where: { userId },
+            include: { items: true },
+            orderBy: { createdAt: "desc" }
+        });
+    }
+    catch (prismaError) {
+        // If Prisma client doesn't recognize new enum values, use raw SQL
+        if (prismaError.message?.includes("not found in enum") || prismaError.code === "P2003") {
+            console.warn("Prisma client out of sync with database enum. Using raw SQL fallback.");
+            console.warn("Please run: npx prisma generate");
+            // Use raw SQL query as fallback
+            const rawOrders = await prisma_1.prisma.$queryRaw `
+        SELECT o.*, 
+               json_agg(
+                 json_build_object(
+                   'id', oi.id,
+                   'orderId', oi."orderId",
+                   'productId', oi."productId",
+                   'variantId', oi."variantId",
+                   'name', oi.name,
+                   'quantity', oi.quantity,
+                   'price', oi.price,
+                   'sku', oi.sku
+                 )
+               ) FILTER (WHERE oi.id IS NOT NULL) as items
+        FROM "Order" o
+        LEFT JOIN "OrderItem" oi ON oi."orderId" = o.id
+        WHERE o."userId" = ${userId}
+        GROUP BY o.id
+        ORDER BY o."createdAt" DESC
+      `;
+            // Transform raw results to match Prisma format
+            orders = rawOrders.map((order) => ({
+                ...order,
+                items: order.items || []
+            }));
+        }
+        else {
+            throw prismaError;
+        }
+    }
     // Fetch product details for each order item
     for (const order of orders) {
         for (const item of order.items) {
@@ -44,11 +83,47 @@ exports.ordersRouter.get("/", auth_1.authenticate, async (req, res) => {
         if (userByEmail) {
             console.log(`Found user by email. User ID: ${userByEmail.id}, Token User ID: ${userId}`);
             // Get orders for this user (by their actual userId in database)
-            const ordersByEmailUser = await prisma_1.prisma.order.findMany({
-                where: { userId: userByEmail.id },
-                include: { items: true },
-                orderBy: { createdAt: "desc" }
-            });
+            let ordersByEmailUser;
+            try {
+                ordersByEmailUser = await prisma_1.prisma.order.findMany({
+                    where: { userId: userByEmail.id },
+                    include: { items: true },
+                    orderBy: { createdAt: "desc" }
+                });
+            }
+            catch (prismaError) {
+                // If Prisma client doesn't recognize new enum values, use raw SQL
+                if (prismaError.message?.includes("not found in enum") || prismaError.code === "P2003") {
+                    console.warn("Prisma client out of sync. Using raw SQL fallback for email strategy.");
+                    const rawOrders = await prisma_1.prisma.$queryRaw `
+            SELECT o.*, 
+                   json_agg(
+                     json_build_object(
+                       'id', oi.id,
+                       'orderId', oi."orderId",
+                       'productId', oi."productId",
+                       'variantId', oi."variantId",
+                       'name', oi.name,
+                       'quantity', oi.quantity,
+                       'price', oi.price,
+                       'sku', oi.sku
+                     )
+                   ) FILTER (WHERE oi.id IS NOT NULL) as items
+            FROM "Order" o
+            LEFT JOIN "OrderItem" oi ON oi."orderId" = o.id
+            WHERE o."userId" = ${userByEmail.id}
+            GROUP BY o.id
+            ORDER BY o."createdAt" DESC
+          `;
+                    ordersByEmailUser = rawOrders.map((order) => ({
+                        ...order,
+                        items: order.items || []
+                    }));
+                }
+                else {
+                    throw prismaError;
+                }
+            }
             // Fetch product details for each order item
             for (const order of ordersByEmailUser) {
                 for (const item of order.items) {
@@ -308,49 +383,106 @@ exports.ordersRouter.get("/admin/all", auth_1.authenticate, (0, auth_1.requireRo
     res.json(orders);
 });
 exports.ordersRouter.patch("/admin/:id/status", auth_1.authenticate, (0, auth_1.requireRole)("ADMIN"), async (req, res) => {
-    const { status } = req.body;
-    const order = await prisma_1.prisma.order.findUnique({
-        where: { id: req.params.id },
-        include: { items: true }
-    });
-    if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-    }
-    if (["CANCELLED", "REFUNDED"].includes(status)) {
-        await prisma_1.prisma.$transaction(async (tx) => {
-            for (const item of order.items) {
-                const inventory = await tx.inventory.findFirst({
-                    where: {
-                        productId: item.variantId ? undefined : item.productId,
-                        variantId: item.variantId ?? undefined
+    try {
+        const { status } = req.body;
+        // Validate status
+        const validStatuses = ["PENDING", "PAID", "PREPARING_TO_SHIP", "READY_TO_SHIP", "CANCELLED", "FULFILLED", "REFUNDED"];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({
+                message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`
+            });
+        }
+        const order = await prisma_1.prisma.order.findUnique({
+            where: { id: req.params.id },
+            include: { items: true }
+        });
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+        if (["CANCELLED", "REFUNDED"].includes(status)) {
+            await prisma_1.prisma.$transaction(async (tx) => {
+                for (const item of order.items) {
+                    const inventory = await tx.inventory.findFirst({
+                        where: {
+                            productId: item.variantId ? undefined : item.productId,
+                            variantId: item.variantId ?? undefined
+                        }
+                    });
+                    if (!inventory) {
+                        continue;
                     }
-                });
-                if (!inventory) {
-                    continue;
+                    const adjustment = (0, inventoryService_1.adjustInventory)(inventory, item.quantity);
+                    await tx.inventory.update({
+                        where: { id: inventory.id },
+                        data: {
+                            quantityReserved: adjustment.quantityReserved,
+                            quantityOnHand: adjustment.quantityOnHand
+                        }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            inventoryId: inventory.id,
+                            type: "IN",
+                            quantity: item.quantity,
+                            reference: `order:${order.id}`,
+                            createdBy: req.user?.id
+                        }
+                    });
                 }
-                const adjustment = (0, inventoryService_1.adjustInventory)(inventory, item.quantity);
-                await tx.inventory.update({
-                    where: { id: inventory.id },
-                    data: {
-                        quantityReserved: adjustment.quantityReserved,
-                        quantityOnHand: adjustment.quantityOnHand
-                    }
-                });
-                await tx.inventoryMovement.create({
-                    data: {
-                        inventoryId: inventory.id,
-                        type: "IN",
-                        quantity: item.quantity,
-                        reference: `order:${order.id}`,
-                        createdBy: req.user?.id
-                    }
-                });
+            });
+        }
+        console.log(`Updating order ${order.id} status from ${order.status} to ${status}`);
+        // Use raw query if Prisma enum doesn't support the status yet
+        // This allows the update to work even if Prisma client hasn't been regenerated
+        try {
+            const updated = await prisma_1.prisma.order.update({
+                where: { id: order.id },
+                data: { status: status }
+            });
+            console.log(`Order status updated successfully:`, updated);
+            res.json(updated);
+        }
+        catch (prismaError) {
+            // If Prisma enum error (PrismaClientValidationError), try raw SQL update
+            const isEnumError = prismaError.code === 'P2003' ||
+                prismaError.name === 'PrismaClientValidationError' ||
+                prismaError.message?.includes('Invalid value') ||
+                prismaError.message?.includes('Expected OrderStatus');
+            if (isEnumError) {
+                console.log("Prisma enum error detected, using raw SQL update");
+                try {
+                    await prisma_1.prisma.$executeRaw `
+              UPDATE "Order" 
+              SET status = ${status}::"OrderStatus"
+              WHERE id = ${order.id}
+            `;
+                    const updated = await prisma_1.prisma.order.findUnique({
+                        where: { id: order.id }
+                    });
+                    console.log(`Order status updated via raw SQL:`, updated);
+                    res.json(updated);
+                }
+                catch (rawSqlError) {
+                    console.error("Raw SQL update also failed:", rawSqlError);
+                    throw new Error(`Failed to update order status. The status "${status}" may not exist in the database enum. Please run migrations: npx prisma migrate deploy && npx prisma generate`);
+                }
             }
+            else {
+                throw prismaError;
+            }
+        }
+    }
+    catch (error) {
+        console.error("Error updating order status:", error);
+        console.error("Error details:", {
+            code: error.code,
+            message: error.message,
+            meta: error.meta
+        });
+        res.status(500).json({
+            message: error.message || "Failed to update order status",
+            error: error.code || "UNKNOWN_ERROR",
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
-    const updated = await prisma_1.prisma.order.update({
-        where: { id: order.id },
-        data: { status: status }
-    });
-    res.json(updated);
 });

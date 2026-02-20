@@ -22,6 +22,8 @@ const orders_1 = require("./routes/orders");
 const admin_1 = require("./routes/admin");
 const upload_1 = require("./routes/upload");
 const integration_1 = require("./routes/integration");
+const adminAgent_1 = require("./routes/adminAgent");
+const customerAgent_1 = require("./routes/customerAgent");
 const error_handler_1 = require("./middleware/error-handler");
 exports.app = (0, express_1.default)();
 // Configure helmet to allow images
@@ -80,6 +82,8 @@ exports.app.use("/api/inventory", inventory_1.inventoryRouter);
 exports.app.use("/api/cart", cart_1.cartRouter);
 exports.app.use("/api/orders", orders_1.ordersRouter);
 exports.app.use("/api/admin", admin_1.adminRouter);
+exports.app.use("/api/admin-agent", adminAgent_1.adminAgentRouter);
+exports.app.use("/api/customer-agent", customerAgent_1.customerAgentRouter);
 exports.app.use("/api/upload", upload_1.uploadRouter);
 exports.app.use("/api/integration", integration_1.integrationRouter);
 exports.app.use(error_handler_1.errorHandler);

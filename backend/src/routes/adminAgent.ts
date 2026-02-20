@@ -2157,7 +2157,7 @@ adminAgentRouter.post(
         return res.status(400).json({ 
           message: "Either productName OR productId is required",
           received: req.body,
-          requiredFields: ["productName"] || ["productId"]
+          requiredFields: ["productName", "productId"]
         });
       }
 
