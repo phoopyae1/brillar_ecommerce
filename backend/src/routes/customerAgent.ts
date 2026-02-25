@@ -3,6 +3,7 @@ import { Prisma, OrderStatus } from "@prisma/client";
 import { prisma } from "../prisma";
 import { authenticate, requireRole, tryRefreshToken } from "../middleware/auth";
 import { consumeInventory, adjustInventory } from "../services/inventoryService";
+import bcrypt from "bcryptjs";
 
 export const customerAgentRouter = Router();
 
@@ -1595,6 +1596,456 @@ customerAgentRouter.post(
         error: error.message,
         customerId: trimmedCustomerId || req.body?.customerId || "unknown",
         orderId: req.body?.orderId || "unknown"
+      });
+    }
+  }
+);
+
+// POST endpoint to get customer profile - Customer only
+customerAgentRouter.post(
+  "/profile",
+  tryRefreshToken,
+  authenticate,
+  requireRole("CUSTOMER"),
+  async (req, res) => {
+    let trimmedCustomerId: string | undefined;
+    
+    try {
+      // Extract customerId from request body (only field allowed)
+      const { customerId: bodyCustomerId, ...rest } = req.body;
+
+      // Check if any extra fields were provided
+      if (Object.keys(rest).length > 0) {
+        return res.status(400).json({ 
+          message: "Request body should only contain 'customerId' field",
+          received: Object.keys(req.body),
+          allowedFields: ["customerId"],
+          extraFields: Object.keys(rest)
+        });
+      }
+
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ 
+          message: "Invalid request body. Expected JSON object with 'customerId' field"
+        });
+      }
+
+      // customerId is REQUIRED in request body
+      if (!bodyCustomerId) {
+        return res.status(400).json({ 
+          message: "Customer ID is required in request body",
+          received: req.body,
+          requiredFields: ["customerId"]
+        });
+      }
+
+      const customerId = bodyCustomerId;
+
+      // Validate customerId format - must be a non-empty string
+      if (typeof customerId !== 'string' || customerId.trim() === '') {
+        return res.status(400).json({ 
+          message: "Customer ID must be a non-empty string",
+          received: { customerId, customerIdType: typeof customerId }
+        });
+      }
+
+      trimmedCustomerId = String(customerId).trim();
+
+      // Security check: customerId in body must match the authenticated user's ID
+      if (req.user && trimmedCustomerId !== req.user.id) {
+        return res.status(403).json({
+          message: "Customer ID in request body must match the authenticated user's ID",
+          providedCustomerId: trimmedCustomerId,
+          authenticatedUserId: req.user.id
+        });
+      }
+
+      // Fetch customer profile
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      if (!customer) {
+        return res.status(404).json({ 
+          message: "Customer not found",
+          customerId: trimmedCustomerId
+        });
+      }
+
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({ 
+          message: "User is not a customer",
+          customerId: trimmedCustomerId,
+          role: customer.role
+        });
+      }
+
+      console.log(`Customer profile fetched successfully: ${trimmedCustomerId}`);
+
+      res.json({
+        success: true,
+        profile: customer,
+        customerId: trimmedCustomerId
+      });
+    } catch (error: any) {
+      console.error("Error fetching customer profile:", error);
+      
+      res.status(500).json({
+        message: "Failed to fetch customer profile",
+        error: error.message,
+        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+      });
+    }
+  }
+);
+
+// POST endpoint to update customer profile - Customer only
+customerAgentRouter.post(
+  "/profile/update",
+  tryRefreshToken,
+  authenticate,
+  requireRole("CUSTOMER"),
+  async (req, res) => {
+    let trimmedCustomerId: string | undefined;
+    
+    try {
+      // Extract customerId and update fields from request body
+      const { customerId: bodyCustomerId, name, email, ...rest } = req.body;
+
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ 
+          message: "Invalid request body. Expected JSON object with 'customerId' and optional 'name' or 'email' fields"
+        });
+      }
+
+      // customerId is REQUIRED in request body
+      if (!bodyCustomerId) {
+        return res.status(400).json({ 
+          message: "Customer ID is required in request body",
+          received: req.body,
+          requiredFields: ["customerId"]
+        });
+      }
+
+      const customerId = bodyCustomerId;
+
+      // Validate customerId format - must be a non-empty string
+      if (typeof customerId !== 'string' || customerId.trim() === '') {
+        return res.status(400).json({ 
+          message: "Customer ID must be a non-empty string",
+          received: { customerId, customerIdType: typeof customerId }
+        });
+      }
+
+      trimmedCustomerId = String(customerId).trim();
+
+      // Security check: customerId in body must match the authenticated user's ID
+      if (req.user && trimmedCustomerId !== req.user.id) {
+        return res.status(403).json({
+          message: "Customer ID in request body must match the authenticated user's ID",
+          providedCustomerId: trimmedCustomerId,
+          authenticatedUserId: req.user.id
+        });
+      }
+
+      // Check if at least one field to update is provided
+      if (!name && !email) {
+        return res.status(400).json({ 
+          message: "At least one field ('name' or 'email') must be provided for update",
+          received: req.body,
+          allowedFields: ["customerId", "name", "email"]
+        });
+      }
+
+      // Validate name if provided
+      if (name !== undefined) {
+        if (typeof name !== 'string' || name.trim() === '') {
+          return res.status(400).json({ 
+            message: "Name must be a non-empty string",
+            received: { name, nameType: typeof name }
+          });
+        }
+        if (name.trim().length < 2) {
+          return res.status(400).json({ 
+            message: "Name must be at least 2 characters long",
+            received: { name: name.trim() }
+          });
+        }
+      }
+
+      // Validate email if provided
+      if (email !== undefined) {
+        if (typeof email !== 'string' || email.trim() === '') {
+          return res.status(400).json({ 
+            message: "Email must be a non-empty string",
+            received: { email, emailType: typeof email }
+          });
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+          return res.status(400).json({ 
+            message: "Email must be a valid email address",
+            received: { email: email.trim() }
+          });
+        }
+      }
+
+      // Verify customer exists and is a customer
+      const existingCustomer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
+      });
+
+      if (!existingCustomer) {
+        return res.status(404).json({ 
+          message: "Customer not found",
+          customerId: trimmedCustomerId
+        });
+      }
+
+      if (existingCustomer.role !== "CUSTOMER") {
+        return res.status(403).json({ 
+          message: "User is not a customer",
+          customerId: trimmedCustomerId,
+          role: existingCustomer.role
+        });
+      }
+
+      // Check if email is already in use by another user
+      if (email && email.trim() !== existingCustomer.email) {
+        const emailInUse = await prisma.user.findUnique({
+          where: { email: email.trim() }
+        });
+
+        if (emailInUse) {
+          return res.status(409).json({ 
+            message: "Email is already in use by another account",
+            email: email.trim()
+          });
+        }
+      }
+
+      // Build update data
+      const updateData: { name?: string; email?: string } = {};
+      if (name !== undefined) {
+        updateData.name = name.trim();
+      }
+      if (email !== undefined) {
+        updateData.email = email.trim();
+      }
+
+      // Update customer profile
+      const updatedCustomer = await prisma.user.update({
+        where: { id: trimmedCustomerId },
+        data: updateData,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      console.log(`Customer profile updated successfully: ${trimmedCustomerId}`);
+
+      res.json({
+        success: true,
+        message: "Profile updated successfully",
+        profile: updatedCustomer,
+        customerId: trimmedCustomerId
+      });
+    } catch (error: any) {
+      console.error("Error updating customer profile:", error);
+      
+      // Handle Prisma unique constraint error
+      if (error.code === 'P2002') {
+        return res.status(409).json({
+          message: "Email is already in use by another account",
+          error: error.message,
+          customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        });
+      }
+      
+      res.status(500).json({
+        message: "Failed to update customer profile",
+        error: error.message,
+        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+      });
+    }
+  }
+);
+
+// POST endpoint to update customer password - Customer only
+customerAgentRouter.post(
+  "/profile/password",
+  tryRefreshToken,
+  authenticate,
+  requireRole("CUSTOMER"),
+  async (req, res) => {
+    let trimmedCustomerId: string | undefined;
+    
+    try {
+      // Extract customerId and password fields from request body
+      const { customerId: bodyCustomerId, currentPassword, newPassword, ...rest } = req.body;
+
+      // Check if any extra fields were provided
+      if (Object.keys(rest).length > 0) {
+        return res.status(400).json({ 
+          message: "Request body should only contain 'customerId', 'currentPassword', and 'newPassword' fields",
+          received: Object.keys(req.body),
+          allowedFields: ["customerId", "currentPassword", "newPassword"],
+          extraFields: Object.keys(rest)
+        });
+      }
+
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ 
+          message: "Invalid request body. Expected JSON object with 'customerId', 'currentPassword', and 'newPassword' fields"
+        });
+      }
+
+      // customerId is REQUIRED in request body
+      if (!bodyCustomerId) {
+        return res.status(400).json({ 
+          message: "Customer ID is required in request body",
+          received: req.body,
+          requiredFields: ["customerId"]
+        });
+      }
+
+      // currentPassword is REQUIRED
+      if (!currentPassword) {
+        return res.status(400).json({ 
+          message: "Current password is required",
+          received: req.body,
+          requiredFields: ["customerId", "currentPassword", "newPassword"]
+        });
+      }
+
+      // newPassword is REQUIRED
+      if (!newPassword) {
+        return res.status(400).json({ 
+          message: "New password is required",
+          received: req.body,
+          requiredFields: ["customerId", "currentPassword", "newPassword"]
+        });
+      }
+
+      const customerId = bodyCustomerId;
+
+      // Validate customerId format - must be a non-empty string
+      if (typeof customerId !== 'string' || customerId.trim() === '') {
+        return res.status(400).json({ 
+          message: "Customer ID must be a non-empty string",
+          received: { customerId, customerIdType: typeof customerId }
+        });
+      }
+
+      // Validate passwords are strings
+      if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return res.status(400).json({ 
+          message: "Passwords must be strings",
+          received: { 
+            currentPasswordType: typeof currentPassword,
+            newPasswordType: typeof newPassword
+          }
+        });
+      }
+
+      // Validate new password length
+      if (newPassword.length < 8) {
+        return res.status(400).json({ 
+          message: "New password must be at least 8 characters long",
+          received: { newPasswordLength: newPassword.length }
+        });
+      }
+
+      trimmedCustomerId = String(customerId).trim();
+
+      // Security check: customerId in body must match the authenticated user's ID
+      if (req.user && trimmedCustomerId !== req.user.id) {
+        return res.status(403).json({
+          message: "Customer ID in request body must match the authenticated user's ID",
+          providedCustomerId: trimmedCustomerId,
+          authenticatedUserId: req.user.id
+        });
+      }
+
+      // Verify customer exists and is a customer
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, passwordHash: true }
+      });
+
+      if (!customer) {
+        return res.status(404).json({ 
+          message: "Customer not found",
+          customerId: trimmedCustomerId
+        });
+      }
+
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({ 
+          message: "User is not a customer",
+          customerId: trimmedCustomerId,
+          role: customer.role
+        });
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, customer.passwordHash);
+      if (!isCurrentPasswordValid) {
+        return res.status(401).json({ 
+          message: "Current password is incorrect",
+          customerId: trimmedCustomerId
+        });
+      }
+
+      // Check if new password is different from current password
+      const isSamePassword = await bcrypt.compare(newPassword, customer.passwordHash);
+      if (isSamePassword) {
+        return res.status(400).json({ 
+          message: "New password must be different from current password",
+          customerId: trimmedCustomerId
+        });
+      }
+
+      // Hash new password
+      const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+      // Update password
+      await prisma.user.update({
+        where: { id: trimmedCustomerId },
+        data: { passwordHash: newPasswordHash }
+      });
+
+      console.log(`Customer password updated successfully: ${trimmedCustomerId}`);
+
+      res.json({
+        success: true,
+        message: "Password updated successfully",
+        customerId: trimmedCustomerId
+      });
+    } catch (error: any) {
+      console.error("Error updating customer password:", error);
+      
+      res.status(500).json({
+        message: "Failed to update password",
+        error: error.message,
+        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
       });
     }
   }

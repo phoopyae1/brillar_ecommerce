@@ -46,6 +46,7 @@ export function Footer() {
     {
       title: "Support & Information",
       links: [
+        { label: "FAQ", href: "/faq" },
         { label: "Help Center", href: "#" },
         { label: "Delivery Zones", href: "#" },
         { label: "Policies", href: "#" },

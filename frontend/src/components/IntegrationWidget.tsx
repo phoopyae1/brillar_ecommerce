@@ -24,7 +24,8 @@ type ProcessedIframe = {
 };
 
 export function IntegrationWidget() {
-  const [integration, setIntegration] = useState<Integration | null>(null);
+  const [publicIntegration, setPublicIntegration] = useState<Integration | null>(null);
+  const [userIntegration, setUserIntegration] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedIframes, setProcessedIframes] = useState<ProcessedIframe[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -55,58 +56,87 @@ export function IntegrationWidget() {
     };
   }, []);
 
-  // Determine which role to load integration for
-  const targetRole = React.useMemo(() => {
-    if (!isLoggedIn || !userRole) return null;
-    // Load "user" integration for regular users, "admin" integration for admins
-    return userRole === "ADMIN" ? "admin" : "user";
-  }, [isLoggedIn, userRole]);
-
-  // Fetch integration based on role
+  // Always fetch public integration (no login required)
   useEffect(() => {
-    if (!targetRole) {
+    const fetchPublicIntegration = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_URL}/api/integration/public`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPublicIntegration(data);
+        } else if (response.status === 404) {
+          setPublicIntegration(null);
+        } else {
+          console.error("Failed to fetch public integration:", response.status);
+          setPublicIntegration(null);
+        }
+      } catch (error) {
+        console.error("Error fetching public integration:", error);
+        setPublicIntegration(null);
+      } finally {
+        // Only set loading to false if user is not logged in
+        // If logged in, wait for user integration to finish loading
+        if (!isLoggedIn) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchPublicIntegration();
+  }, [isLoggedIn]);
+
+  // Fetch user/admin integration if logged in
+  useEffect(() => {
+    if (!isLoggedIn || !userRole) {
+      setUserIntegration(null);
       setLoading(false);
-      setIntegration(null);
       return;
     }
 
-    const fetchIntegration = async () => {
+    const fetchUserIntegration = async () => {
       try {
         setLoading(true);
+        const targetRole = userRole === "ADMIN" ? "admin" : "user";
         const response = await fetch(`${API_URL}/api/integration/${targetRole}`);
         
         if (response.ok) {
           const data = await response.json();
-          setIntegration(data);
+          setUserIntegration(data);
         } else if (response.status === 404) {
-          // No integration found for this role
-          setIntegration(null);
+          setUserIntegration(null);
         } else {
-          console.error("Failed to fetch integration:", response.status);
-          setIntegration(null);
+          console.error("Failed to fetch user integration:", response.status);
+          setUserIntegration(null);
         }
       } catch (error) {
-        console.error("Error fetching integration:", error);
-        setIntegration(null);
+        console.error("Error fetching user integration:", error);
+        setUserIntegration(null);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchIntegration();
-  }, [targetRole]);
+    fetchUserIntegration();
+  }, [isLoggedIn, userRole]);
 
-  // Process script tags and inject them
+  // Determine which integration to use (prioritize user/admin if logged in, otherwise public)
+  const activeIntegration = React.useMemo(() => {
+    if (isLoggedIn && userIntegration) {
+      return userIntegration;
+    }
+    return publicIntegration;
+  }, [isLoggedIn, userIntegration, publicIntegration]);
+
+  // Process script tags for public integration (always load)
   useEffect(() => {
-    if (!integration || !integration.iframeOrScript) {
-      // Clean up scripts when integration is removed
-      const scripts = document.querySelectorAll('[id^="integration-script-"]');
-      scripts.forEach((script) => script.remove());
+    if (!publicIntegration || !publicIntegration.iframeOrScript) {
       return;
     }
 
-    const embedCode = integration.iframeOrScript.trim();
-    const integrationId = integration.id || `integration-${Date.now()}`;
+    const embedCode = publicIntegration.iframeOrScript.trim();
+    const integrationId = `public-${publicIntegration.id || Date.now()}`;
 
     // Handle script tags
     if (embedCode.startsWith("<script")) {
@@ -164,38 +194,116 @@ export function IntegrationWidget() {
         script.remove();
       }
     };
-  }, [integration]);
+  }, [publicIntegration]);
 
-  // Process iframe integrations
+  // Process script tags for user/admin integration (if logged in)
   useEffect(() => {
-    if (!integration || !integration.iframeOrScript) {
-      setProcessedIframes([]);
+    if (!userIntegration || !userIntegration.iframeOrScript) {
+      // Clean up user scripts when integration is removed
+      const scripts = document.querySelectorAll('[id^="integration-script-user-"]');
+      scripts.forEach((script) => script.remove());
       return;
     }
 
-    const embedCode = integration.iframeOrScript.trim();
+    const embedCode = userIntegration.iframeOrScript.trim();
+    const integrationId = `user-${userIntegration.id || Date.now()}`;
 
-    // Only process if it's an iframe
-    if (!embedCode.startsWith("<iframe")) {
-      setProcessedIframes([]);
-      return;
+    // Handle script tags
+    if (embedCode.startsWith("<script")) {
+      const scriptId = `integration-script-${integrationId}`;
+
+      // Remove existing script if present
+      const existingScript = document.getElementById(scriptId);
+      if (existingScript) {
+        existingScript.remove();
+      }
+
+      // Extract src from script tag
+      const scriptTagMatch = embedCode.match(/<script[^>]+src=["']([^"']+)["']/i);
+
+      if (scriptTagMatch) {
+        let scriptSrc = scriptTagMatch[1];
+
+        // Add userId parameter if user is logged in
+        const user = getUser();
+        if (user?.id) {
+          try {
+            const url = new URL(scriptSrc, window.location.origin);
+            url.searchParams.set("userId", String(user.id));
+            scriptSrc = url.toString();
+          } catch {
+            const separator = scriptSrc.includes("?") ? "&" : "?";
+            scriptSrc = `${scriptSrc}${separator}userId=${String(user.id)}`;
+          }
+        }
+
+        const script = document.createElement("script");
+        script.id = scriptId;
+        script.src = scriptSrc;
+        script.async = true;
+        document.head.appendChild(script);
+      } else {
+        const contentMatch = embedCode.match(/>([\s\S]*?)<\/script>/s);
+        if (contentMatch) {
+          const script = document.createElement("script");
+          script.id = scriptId;
+          script.textContent = contentMatch[1];
+          document.head.appendChild(script);
+        }
+      }
     }
 
+    return () => {
+      const scriptId = `integration-script-${integrationId}`;
+      const script = document.getElementById(scriptId);
+      if (script) {
+        script.remove();
+      }
+    };
+  }, [userIntegration]);
+
+  // Process iframe integrations - combine public and user/admin
+  useEffect(() => {
+    const allIframes: ProcessedIframe[] = [];
+
+    // Process public integration iframe (always load)
+    if (publicIntegration && publicIntegration.iframeOrScript) {
+      const embedCode = publicIntegration.iframeOrScript.trim();
+
+      if (embedCode.startsWith("<iframe")) {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = embedCode;
     const iframe = wrapper.querySelector("iframe");
 
-    if (!iframe) {
-      setProcessedIframes([]);
-      return;
+        if (iframe) {
+          const srcAttr = iframe.getAttribute("src");
+          if (srcAttr) {
+            let sanitizedSrc = srcAttr.trim();
+            const processedIframe: ProcessedIframe = {
+              integration: publicIntegration,
+              src: sanitizedSrc,
+              title: iframe.getAttribute("title") || "Public Agent",
+              allow: iframe.getAttribute("allow"),
+              loading: iframe.getAttribute("loading")
+            };
+            allIframes.push(processedIframe);
+    }
+        }
+      }
     }
 
+    // Process user/admin integration iframe (if logged in)
+    if (isLoggedIn && userIntegration && userIntegration.iframeOrScript) {
+      const embedCode = userIntegration.iframeOrScript.trim();
+
+      if (embedCode.startsWith("<iframe")) {
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = embedCode;
+        const iframe = wrapper.querySelector("iframe");
+
+        if (iframe) {
     const srcAttr = iframe.getAttribute("src");
-    if (!srcAttr) {
-      setProcessedIframes([]);
-      return;
-    }
-
+          if (srcAttr) {
     let sanitizedSrc = srcAttr.trim();
 
     // Inject userId into iframe URL if user is logged in
@@ -214,18 +322,25 @@ export function IntegrationWidget() {
     }
 
     const processedIframe: ProcessedIframe = {
-      integration,
+              integration: userIntegration,
       src: sanitizedSrc,
-      title: iframe.getAttribute("title") || "Integration Widget",
+              title: iframe.getAttribute("title") || "User Agent",
       allow: iframe.getAttribute("allow"),
       loading: iframe.getAttribute("loading")
     };
+            allIframes.push(processedIframe);
+          }
+        }
+      }
+    }
 
-    setProcessedIframes([processedIframe]);
-  }, [integration]);
+    setProcessedIframes(allIframes);
+    setLoading(false);
+  }, [publicIntegration, userIntegration, isLoggedIn]);
 
-  // Don't render anything if loading, not logged in, or no iframes found
-  if (loading || !isLoggedIn || processedIframes.length === 0) {
+  // Don't render anything if loading or no iframes found
+  // Public agent should load even when not logged in
+  if (loading || processedIframes.length === 0) {
     return null;
   }
 

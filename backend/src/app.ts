@@ -18,6 +18,7 @@ import { uploadRouter } from "./routes/upload";
 import { integrationRouter } from "./routes/integration";
 import { adminAgentRouter } from "./routes/adminAgent";
 import { customerAgentRouter } from "./routes/customerAgent";
+import { faqRouter } from "./routes/faq";
 import { errorHandler } from "./middleware/error-handler";
 
 export const app = express();
@@ -87,6 +88,7 @@ app.use("/api/orders", ordersRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/admin-agent", adminAgentRouter);
 app.use("/api/customer-agent", customerAgentRouter);
+app.use("/api/faq", faqRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/integration", integrationRouter);
 

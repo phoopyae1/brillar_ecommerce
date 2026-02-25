@@ -19,6 +19,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import WarehouseIcon from "@mui/icons-material/Warehouse";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { logout } from "../utils/auth";
 
@@ -28,7 +29,8 @@ const menuItems = [
   { href: "/admin", label: "Dashboard", icon: <DashboardIcon /> },
   { href: "/admin/products", label: "Products", icon: <InventoryIcon /> },
   { href: "/admin/orders", label: "Orders", icon: <ShoppingCartIcon /> },
-  { href: "/admin/inventory", label: "Inventory", icon: <WarehouseIcon /> }
+  { href: "/admin/inventory", label: "Inventory", icon: <WarehouseIcon /> },
+  { href: "/admin/faq", label: "FAQ", icon: <HelpOutlineIcon /> }
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {

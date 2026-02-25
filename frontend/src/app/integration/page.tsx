@@ -29,14 +29,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 type IntegrationData = {
   contextKey: string;
   iframeOrScript: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | "public";
 };
 
 export default function IntegrationPage() {
   const [formData, setFormData] = React.useState<IntegrationData>({
     contextKey: "",
     iframeOrScript: "",
-    role: "user"
+    role: "public"
   });
   const [loading, setLoading] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState<{
@@ -171,10 +171,15 @@ export default function IntegrationPage() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        role: e.target.value as "user" | "admin"
+                        role: e.target.value as "user" | "admin" | "public"
                       })
                     }
                   >
+                    <FormControlLabel
+                      value="public"
+                      control={<Radio />}
+                      label="Public"
+                    />
                     <FormControlLabel
                       value="user"
                       control={<Radio />}
@@ -187,7 +192,7 @@ export default function IntegrationPage() {
                     />
                   </RadioGroup>
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                    Select whether this integration is for user or admin role. 
+                    Select the role for this integration: Public (loads before login), User (for logged-in customers), or Admin (for admin users). 
                     Saving will replace any existing integration with the same context key.
                   </Typography>
                 </FormControl>
