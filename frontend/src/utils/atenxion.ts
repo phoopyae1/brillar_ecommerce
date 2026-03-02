@@ -7,7 +7,7 @@ interface AtenxionCredentials {
 
 interface AtenxionRequestBody {
   userId: string;
-  // customerId: string; // Keep for API compatibility, but will be set to userId
+  customerId: string;
   agentId?: string;
   Authorization: string;
 }
@@ -114,7 +114,7 @@ async function normalizeCredentials(
 
   const body: AtenxionRequestBody = {
     userId,
-    // customerId,
+    customerId: userId,
     agentId: agentId || agentchainId,
     Authorization: `Bearer ${userToken}`
   };
