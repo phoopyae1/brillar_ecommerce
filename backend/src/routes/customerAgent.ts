@@ -14,97 +14,93 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId from request body (only field allowed)
-      const { customerId: bodyCustomerId, ...rest } = req.body;
+    // STRICT FILTERING: Only show products for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided
-      if (Object.keys(rest).length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' field",
-          received: Object.keys(req.body),
-          allowedFields: ["customerId"],
-          extraFields: Object.keys(rest)
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
+
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to view products for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Product list request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' field"
-        });
-      }
-
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
-        });
-      }
-
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format - must be a non-empty string
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Security check: customerId in body must match the authenticated user's ID
-      if (req.user && trimmedCustomerId !== req.user.id) {
-        return res.status(403).json({
-          message: "Customer ID in request body must match the authenticated user's ID",
-          providedCustomerId: trimmedCustomerId,
-          authenticatedUserId: req.user.id
-        });
-      }
-
-      // Verify customer exists and is a customer (REQUIRED)
-      try {
-        const customer = await prisma.user.findUnique({
-          where: { id: trimmedCustomerId },
-          select: { id: true, role: true, email: true }
-        });
-
-        if (!customer) {
-          return res.status(404).json({ 
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
             message: "Customer not found",
-            customerId: trimmedCustomerId
-          });
-        }
-
-        if (customer.role !== "CUSTOMER") {
-          return res.status(403).json({ 
-            message: "User is not a customer",
+            code: "NOT_FOUND",
             customerId: trimmedCustomerId,
-            role: customer.role,
-            email: customer.email
-          });
-        }
-
-        console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
-      } catch (customerError: any) {
-        console.error("Error verifying customer:", customerError);
-        return res.status(500).json({
-          message: "Failed to verify customer",
-          customerId: trimmedCustomerId,
-          error: customerError.message
+          },
         });
       }
 
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
+        });
+      }
+
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
+
+    try {
       // Build where clause - only show active products
       const where: any = {
         status: "ACTIVE"
@@ -219,6 +215,7 @@ customerAgentRouter.post(
       console.log(`Product list fetched successfully: ${formattedProducts.length} products for customer: ${trimmedCustomerId}`);
 
       res.json({
+        success: true,
         products: formattedProducts,
         pagination: {
           page: pageNumber,
@@ -236,9 +233,12 @@ customerAgentRouter.post(
       console.error("Error fetching product list:", error);
       
       res.status(500).json({
-        message: "Failed to fetch product list",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: "Failed to fetch product list",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown"
+        },
       });
     }
   }
@@ -296,62 +296,93 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId from request body (only field allowed)
-      const { customerId: bodyCustomerId, ...rest } = req.body;
+    // STRICT FILTERING: Only show orders for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided
-      if (Object.keys(rest).length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' field",
-          received: Object.keys(req.body),
-          allowedFields: ["customerId"],
-          extraFields: Object.keys(rest)
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
+
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to view orders for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Orders list request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' field"
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
 
-      const customerId = bodyCustomerId;
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
 
-      // Validate customerId format
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Verify customer
-      const verification = await verifyCustomer(trimmedCustomerId, req.user?.id);
-      if (verification.error) {
-        return res.status(verification.error.status).json(verification.error);
-      }
-
-      console.log(`Customer verified: ${trimmedCustomerId} (${verification.customer!.email})`);
+    try {
 
       // Fetch orders for the customer
       let orders;
@@ -438,6 +469,7 @@ customerAgentRouter.post(
       console.log(`Orders list fetched successfully: ${formattedOrders.length} orders for customer: ${trimmedCustomerId}`);
 
       res.json({
+        success: true,
         orders: formattedOrders,
         total: formattedOrders.length,
         customerId: trimmedCustomerId
@@ -446,9 +478,12 @@ customerAgentRouter.post(
       console.error("Error fetching orders list:", error);
       
       res.status(500).json({
-        message: "Failed to fetch orders list",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: "Failed to fetch orders list",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown"
+        },
       });
     }
   }
@@ -461,62 +496,93 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId from request body (only field allowed)
-      const { customerId: bodyCustomerId, ...rest } = req.body;
+    // STRICT FILTERING: Only show order details for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided
-      if (Object.keys(rest).length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' field",
-          received: Object.keys(req.body),
-          allowedFields: ["customerId"],
-          extraFields: Object.keys(rest)
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
+
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to view order details for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Order details request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' field"
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
 
-      const customerId = bodyCustomerId;
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
 
-      // Validate customerId format
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Verify customer
-      const verification = await verifyCustomer(trimmedCustomerId, req.user?.id);
-      if (verification.error) {
-        return res.status(verification.error.status).json(verification.error);
-      }
-
-      console.log(`Customer verified: ${trimmedCustomerId} (${verification.customer!.email})`);
+    try {
 
       // Fetch all orders for the customer with full details
       let orders;
@@ -615,6 +681,7 @@ customerAgentRouter.post(
       console.log(`Order details fetched successfully: ${formattedOrders.length} orders for customer: ${trimmedCustomerId}`);
 
       res.json({
+        success: true,
         orders: formattedOrders,
         total: formattedOrders.length,
         customerId: trimmedCustomerId
@@ -623,9 +690,12 @@ customerAgentRouter.post(
       console.error("Error fetching order details:", error);
       
       res.status(500).json({
-        message: "Failed to fetch order details",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: "Failed to fetch order details",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown"
+        },
       });
     }
   }
@@ -652,86 +722,129 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId, orderId, or productName from request body
-      // Note: refreshToken may be added by fetchWithAuth, but we ignore it as it's handled by middleware
-      const { customerId: bodyCustomerId, orderId, productName, refreshToken, ...rest } = req.body;
+    // STRICT FILTERING: Only allow buy-it-again for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided (excluding refreshToken which is handled by middleware)
-      const allowedFields = ["customerId", "orderId", "productName", "refreshToken"];
-      const receivedFields = Object.keys(req.body);
-      const extraFields = receivedFields.filter(field => !allowedFields.includes(field));
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
 
-      if (extraFields.length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' and either 'orderId' OR 'productName' fields",
-          received: receivedFields,
-          allowedFields: ["customerId", "orderId", "productName"],
-          extraFields: extraFields
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to perform this action for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Buy it again request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        orderId: orderId,
-        productName: productName,
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' and either 'orderId' or 'productName' fields"
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId", "orderId or productName"]
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
+
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
+
+    try {
+      // Extract orderId or productName from request body
+      const { orderId, productName } = req.body;
 
       // Either orderId OR productName is REQUIRED in request body
       if (!orderId && !productName) {
-        return res.status(400).json({ 
-          message: "Either 'orderId' or 'productName' is required in request body",
-          received: req.body,
-          requiredFields: ["customerId", "orderId or productName"]
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Either 'orderId' or 'productName' is required in request body",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // Cannot provide both orderId and productName
       if (orderId && productName) {
-        return res.status(400).json({ 
-          message: "Please provide either 'orderId' OR 'productName', not both",
-          received: req.body
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Please provide either 'orderId' OR 'productName', not both",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
       let trimmedOrderId: string | undefined;
 
       // If productName is provided, find the most recent order containing that product
       if (productName) {
         if (typeof productName !== 'string' || productName.trim() === '') {
-          return res.status(400).json({ 
-            message: "Product name must be a non-empty string",
-            received: { productName, productNameType: typeof productName }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Product name must be a non-empty string",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
 
@@ -761,11 +874,14 @@ customerAgentRouter.post(
           });
 
           if (ordersWithProduct.length === 0) {
-            return res.status(404).json({ 
-              message: "No order found containing a product with that name",
-              productName: trimmedProductName,
-              customerId: trimmedCustomerId,
-              note: "Make sure the product name matches an item in one of your previous orders"
+            return res.status(404).json({
+              success: false,
+              error: {
+                message: "No order found containing a product with that name",
+                code: "NOT_FOUND",
+                productName: trimmedProductName,
+                customerId: trimmedCustomerId,
+              },
             });
           }
 
@@ -787,11 +903,14 @@ customerAgentRouter.post(
             `;
             
             if (rawOrders.length === 0) {
-              return res.status(404).json({ 
-                message: "No order found containing a product with that name",
-                productName: trimmedProductName,
-                customerId: trimmedCustomerId,
-                note: "Make sure the product name matches an item in one of your previous orders"
+              return res.status(404).json({
+                success: false,
+                error: {
+                  message: "No order found containing a product with that name",
+                  code: "NOT_FOUND",
+                  productName: trimmedProductName,
+                  customerId: trimmedCustomerId,
+                },
               });
             }
 
@@ -804,21 +923,16 @@ customerAgentRouter.post(
       } else {
         // Validate orderId format
         if (typeof orderId !== 'string' || orderId.trim() === '') {
-          return res.status(400).json({ 
-            message: "Order ID must be a non-empty string",
-            received: { orderId, orderIdType: typeof orderId }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Order ID must be a non-empty string",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
         trimmedOrderId = String(orderId).trim();
       }
-
-      // Verify customer
-      const verification = await verifyCustomer(trimmedCustomerId, req.user?.id);
-      if (verification.error) {
-        return res.status(verification.error.status).json(verification.error);
-      }
-
-      console.log(`Customer verified: ${trimmedCustomerId} (${verification.customer!.email})`);
 
       // Fetch the order and verify it belongs to the customer
       let order;
@@ -871,18 +985,25 @@ customerAgentRouter.post(
       }
 
       if (!order) {
-        return res.status(404).json({ 
-          message: "Order not found",
-          orderId: trimmedOrderId,
-          customerId: trimmedCustomerId,
-          note: "Make sure the order belongs to the specified customer"
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Order not found",
+            code: "NOT_FOUND",
+            orderId: trimmedOrderId,
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
       if (!order.items || order.items.length === 0) {
-        return res.status(400).json({ 
-          message: "Order has no items to add to cart",
-          orderId: trimmedOrderId
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Order has no items to add to cart",
+            code: "VALIDATION_ERROR",
+            orderId: trimmedOrderId,
+          },
         });
       }
 
@@ -1067,10 +1188,12 @@ customerAgentRouter.post(
       console.error("Error in buy it again:", error);
       
       res.status(500).json({
-        message: "Failed to add items to cart",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown",
-        orderId: req.body?.orderId || "unknown"
+        success: false,
+        error: {
+          message: "Failed to add items to cart",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown",
+        },
       });
     }
   }
@@ -1083,100 +1206,137 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId and items from request body
-      const { customerId: bodyCustomerId, items, refreshToken, ...rest } = req.body;
+    // STRICT FILTERING: Only allow order creation for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Note: items array can contain productId OR productName (with optional category)
-      // So we don't validate the structure of items array here, just that it exists
-      // Check if any extra fields were provided (excluding refreshToken)
-      const allowedFields = ["customerId", "items", "refreshToken"];
-      const receivedFields = Object.keys(req.body);
-      const extraFields = receivedFields.filter(field => !allowedFields.includes(field));
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
 
-      if (extraFields.length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' and 'items' fields",
-          received: receivedFields,
-          allowedFields: ["customerId", "items"],
-          extraFields: extraFields,
-          note: "Each item in 'items' array can have either 'productId' OR 'productName' (with optional 'category')"
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to create orders for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Create order request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        itemsCount: items?.length,
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' and 'items' fields"
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
-      // customerId is REQUIRED
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId", "items"]
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
+
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
+
+    try {
+      // Extract items from request body
+      const { items } = req.body;
 
       // items is REQUIRED
       if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ 
-          message: "Items array is required and must not be empty",
-          received: req.body
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Items array is required and must not be empty",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
-
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Verify customer
-      const verification = await verifyCustomer(trimmedCustomerId, req.user?.id);
-      if (verification.error) {
-        return res.status(verification.error.status).json(verification.error);
-      }
-
-      console.log(`Customer verified: ${trimmedCustomerId} (${verification.customer!.email})`);
 
       // Validate items structure
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         // Either productId OR productName is required
         if (!item.productId && !item.productName) {
-          return res.status(400).json({ 
-            message: `Item at index ${i} must have either 'productId' or 'productName'`,
-            item: item
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: `Item at index ${i} must have either 'productId' or 'productName'`,
+              code: "VALIDATION_ERROR",
+            },
           });
         }
         // Cannot provide both
         if (item.productId && item.productName) {
-          return res.status(400).json({ 
-            message: `Item at index ${i} cannot have both 'productId' and 'productName'. Please provide only one.`,
-            item: item
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: `Item at index ${i} cannot have both 'productId' and 'productName'. Please provide only one.`,
+              code: "VALIDATION_ERROR",
+            },
           });
         }
         if (!item.quantity || typeof item.quantity !== 'number' || item.quantity <= 0) {
-          return res.status(400).json({ 
-            message: `Item at index ${i} must have a positive 'quantity'`,
-            item: item
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: `Item at index ${i} must have a positive 'quantity'`,
+              code: "VALIDATION_ERROR",
+            },
           });
         }
       }
@@ -1361,9 +1521,12 @@ customerAgentRouter.post(
       console.error("Error creating order:", error);
       
       res.status(500).json({
-        message: "Failed to create order",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: error.message || "Failed to create order",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown"
+        },
       });
     }
   }
@@ -1376,85 +1539,119 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId and orderId from request body
-      const { customerId: bodyCustomerId, orderId, refreshToken, ...rest } = req.body;
+    // STRICT FILTERING: Only allow order cancellation for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided (excluding refreshToken)
-      const allowedFields = ["customerId", "orderId", "refreshToken"];
-      const receivedFields = Object.keys(req.body);
-      const extraFields = receivedFields.filter(field => !allowedFields.includes(field));
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
 
-      if (extraFields.length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' and 'orderId' fields",
-          received: receivedFields,
-          allowedFields: ["customerId", "orderId"],
-          extraFields: extraFields
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to cancel orders for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
 
-      console.log("Cancel order request received:", { 
-        customerIdFromBody: bodyCustomerId, 
-        orderId: orderId,
-        customerIdFromToken: req.user?.id
+    // Verify customer exists and is a customer
+    try {
+      const customer = await prisma.user.findUnique({
+        where: { id: trimmedCustomerId },
+        select: { id: true, role: true, email: true }
       });
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' and 'orderId' fields"
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
-      // customerId is REQUIRED
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId", "orderId"]
+      if (customer.role !== "CUSTOMER") {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
+
+      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+    } catch (customerError: any) {
+      console.error("Error verifying customer:", customerError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to verify customer",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
+
+    try {
+      // Extract orderId from request body
+      const { orderId } = req.body;
 
       // orderId is REQUIRED
       if (!orderId) {
-        return res.status(400).json({ 
-          message: "Order ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId", "orderId"]
-        });
-      }
-
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Order ID is required in request body",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // Validate orderId format
       if (typeof orderId !== 'string' || orderId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Order ID must be a non-empty string",
-          received: { orderId, orderIdType: typeof orderId }
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Order ID must be a non-empty string",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
-      trimmedCustomerId = String(customerId).trim();
       const trimmedOrderId = String(orderId).trim();
-
-      // Verify customer
-      const verification = await verifyCustomer(trimmedCustomerId, req.user?.id);
-      if (verification.error) {
-        return res.status(verification.error.status).json(verification.error);
-      }
-
-      console.log(`Customer verified: ${trimmedCustomerId} (${verification.customer!.email})`);
 
       // Fetch the order and verify it belongs to the customer
       let order: any = null;
@@ -1504,22 +1701,28 @@ customerAgentRouter.post(
       }
 
       if (!order) {
-        return res.status(404).json({ 
-          message: "Order not found",
-          orderId: trimmedOrderId,
-          customerId: trimmedCustomerId,
-          note: "Make sure the order belongs to the specified customer"
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Order not found",
+            code: "NOT_FOUND",
+            orderId: trimmedOrderId,
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
       // Check if order can be cancelled
       const cancellableStatuses = ["PENDING", "PAID", "PREPARING_TO_SHIP"];
       if (!cancellableStatuses.includes(order.status)) {
-        return res.status(400).json({ 
-          message: `Order cannot be cancelled. Current status: ${order.status}`,
-          orderId: trimmedOrderId,
-          currentStatus: order.status,
-          cancellableStatuses: cancellableStatuses
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: `Order cannot be cancelled. Current status: ${order.status}`,
+            code: "VALIDATION_ERROR",
+            orderId: trimmedOrderId,
+            currentStatus: order.status,
+          },
         });
       }
 
@@ -1592,10 +1795,12 @@ customerAgentRouter.post(
       console.error("Error cancelling order:", error);
       
       res.status(500).json({
-        message: "Failed to cancel order",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown",
-        orderId: req.body?.orderId || "unknown"
+        success: false,
+        error: {
+          message: error.message || "Failed to cancel order",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown",
+        },
       });
     }
   }
@@ -1716,70 +1921,82 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId and update fields from request body
-      const { customerId: bodyCustomerId, name, email, ...rest } = req.body;
+    // STRICT FILTERING: Only allow profile update for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' and optional 'name' or 'email' fields"
-        });
-      }
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
 
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
-        });
-      }
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
 
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format - must be a non-empty string
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
           message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
 
-      trimmedCustomerId = String(customerId).trim();
+    const trimmedCustomerId = String(profileCustomerId).trim();
 
-      // Security check: customerId in body must match the authenticated user's ID
-      if (req.user && trimmedCustomerId !== req.user.id) {
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
         return res.status(403).json({
-          message: "Customer ID in request body must match the authenticated user's ID",
-          providedCustomerId: trimmedCustomerId,
-          authenticatedUserId: req.user.id
+          success: false,
+          error: {
+            message: "You are not allowed to update profile for another user",
+            code: "FORBIDDEN",
+          },
         });
       }
+    }
+
+    try {
+      // Extract update fields from request body
+      const { name, email } = req.body;
 
       // Check if at least one field to update is provided
       if (!name && !email) {
-        return res.status(400).json({ 
-          message: "At least one field ('name' or 'email') must be provided for update",
-          received: req.body,
-          allowedFields: ["customerId", "name", "email"]
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "At least one field ('name' or 'email') must be provided for update",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // Validate name if provided
       if (name !== undefined) {
         if (typeof name !== 'string' || name.trim() === '') {
-          return res.status(400).json({ 
-            message: "Name must be a non-empty string",
-            received: { name, nameType: typeof name }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Name must be a non-empty string",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
         if (name.trim().length < 2) {
-          return res.status(400).json({ 
-            message: "Name must be at least 2 characters long",
-            received: { name: name.trim() }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Name must be at least 2 characters long",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
       }
@@ -1787,16 +2004,22 @@ customerAgentRouter.post(
       // Validate email if provided
       if (email !== undefined) {
         if (typeof email !== 'string' || email.trim() === '') {
-          return res.status(400).json({ 
-            message: "Email must be a non-empty string",
-            received: { email, emailType: typeof email }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Email must be a non-empty string",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email.trim())) {
-          return res.status(400).json({ 
-            message: "Email must be a valid email address",
-            received: { email: email.trim() }
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: "Email must be a valid email address",
+              code: "VALIDATION_ERROR",
+            },
           });
         }
       }
@@ -1808,17 +2031,25 @@ customerAgentRouter.post(
       });
 
       if (!existingCustomer) {
-        return res.status(404).json({ 
-          message: "Customer not found",
-          customerId: trimmedCustomerId
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
       if (existingCustomer.role !== "CUSTOMER") {
-        return res.status(403).json({ 
-          message: "User is not a customer",
-          customerId: trimmedCustomerId,
-          role: existingCustomer.role
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: existingCustomer.role,
+          },
         });
       }
 
@@ -1829,9 +2060,13 @@ customerAgentRouter.post(
         });
 
         if (emailInUse) {
-          return res.status(409).json({ 
-            message: "Email is already in use by another account",
-            email: email.trim()
+          return res.status(409).json({
+            success: false,
+            error: {
+              message: "Email is already in use by another account",
+              code: "CONFLICT",
+              email: email.trim(),
+            },
           });
         }
       }
@@ -1873,16 +2108,22 @@ customerAgentRouter.post(
       // Handle Prisma unique constraint error
       if (error.code === 'P2002') {
         return res.status(409).json({
-          message: "Email is already in use by another account",
-          error: error.message,
-          customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+          success: false,
+          error: {
+            message: "Email is already in use by another account",
+            code: "CONFLICT",
+            customerId: trimmedCustomerId || "unknown",
+          },
         });
       }
       
       res.status(500).json({
-        message: "Failed to update customer profile",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: error.message || "Failed to update customer profile",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown",
+        },
       });
     }
   }
@@ -1895,93 +2136,94 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
+    // STRICT FILTERING: Only allow password update for the authenticated customer
+    const authenticatedUserId = req.user?.id;
+
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
+      });
+    }
+
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to update password for another user",
+            code: "FORBIDDEN",
+          },
+        });
+      }
+    }
+
     try {
-      // Extract customerId and password fields from request body
-      const { customerId: bodyCustomerId, currentPassword, newPassword, ...rest } = req.body;
-
-      // Check if any extra fields were provided
-      if (Object.keys(rest).length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId', 'currentPassword', and 'newPassword' fields",
-          received: Object.keys(req.body),
-          allowedFields: ["customerId", "currentPassword", "newPassword"],
-          extraFields: Object.keys(rest)
-        });
-      }
-
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId', 'currentPassword', and 'newPassword' fields"
-        });
-      }
-
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
-        });
-      }
+      // Extract password fields from request body
+      const { currentPassword, newPassword } = req.body;
 
       // currentPassword is REQUIRED
       if (!currentPassword) {
-        return res.status(400).json({ 
-          message: "Current password is required",
-          received: req.body,
-          requiredFields: ["customerId", "currentPassword", "newPassword"]
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Current password is required",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // newPassword is REQUIRED
       if (!newPassword) {
-        return res.status(400).json({ 
-          message: "New password is required",
-          received: req.body,
-          requiredFields: ["customerId", "currentPassword", "newPassword"]
-        });
-      }
-
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format - must be a non-empty string
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "New password is required",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // Validate passwords are strings
       if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
-        return res.status(400).json({ 
-          message: "Passwords must be strings",
-          received: { 
-            currentPasswordType: typeof currentPassword,
-            newPasswordType: typeof newPassword
-          }
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "Passwords must be strings",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
       // Validate new password length
       if (newPassword.length < 8) {
-        return res.status(400).json({ 
-          message: "New password must be at least 8 characters long",
-          received: { newPasswordLength: newPassword.length }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Security check: customerId in body must match the authenticated user's ID
-      if (req.user && trimmedCustomerId !== req.user.id) {
-        return res.status(403).json({
-          message: "Customer ID in request body must match the authenticated user's ID",
-          providedCustomerId: trimmedCustomerId,
-          authenticatedUserId: req.user.id
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "New password must be at least 8 characters long",
+            code: "VALIDATION_ERROR",
+          },
         });
       }
 
@@ -1992,35 +2234,51 @@ customerAgentRouter.post(
       });
 
       if (!customer) {
-        return res.status(404).json({ 
-          message: "Customer not found",
-          customerId: trimmedCustomerId
+        return res.status(404).json({
+          success: false,
+          error: {
+            message: "Customer not found",
+            code: "NOT_FOUND",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
       if (customer.role !== "CUSTOMER") {
-        return res.status(403).json({ 
-          message: "User is not a customer",
-          customerId: trimmedCustomerId,
-          role: customer.role
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "User is not a customer",
+            code: "FORBIDDEN",
+            requiredRole: "CUSTOMER",
+            userRole: customer.role,
+          },
         });
       }
 
       // Verify current password
       const isCurrentPasswordValid = await bcrypt.compare(currentPassword, customer.passwordHash);
       if (!isCurrentPasswordValid) {
-        return res.status(401).json({ 
-          message: "Current password is incorrect",
-          customerId: trimmedCustomerId
+        return res.status(401).json({
+          success: false,
+          error: {
+            message: "Current password is incorrect",
+            code: "UNAUTHORIZED",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
       // Check if new password is different from current password
       const isSamePassword = await bcrypt.compare(newPassword, customer.passwordHash);
       if (isSamePassword) {
-        return res.status(400).json({ 
-          message: "New password must be different from current password",
-          customerId: trimmedCustomerId
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: "New password must be different from current password",
+            code: "VALIDATION_ERROR",
+            customerId: trimmedCustomerId,
+          },
         });
       }
 
@@ -2044,9 +2302,12 @@ customerAgentRouter.post(
       console.error("Error updating customer password:", error);
       
       res.status(500).json({
-        message: "Failed to update password",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+        success: false,
+        error: {
+          message: error.message || "Failed to update password",
+          code: "INTERNAL_ERROR",
+          customerId: trimmedCustomerId || "unknown",
+        },
       });
     }
   }
