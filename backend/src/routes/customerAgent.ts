@@ -1608,103 +1608,104 @@ customerAgentRouter.post(
   authenticate,
   requireRole("CUSTOMER"),
   async (req, res) => {
-    let trimmedCustomerId: string | undefined;
-    
-    try {
-      // Extract customerId from request body (only field allowed)
-      const { customerId: bodyCustomerId, ...rest } = req.body;
+    // STRICT FILTERING: Only show profile for the authenticated customer
+    const authenticatedUserId = req.user?.id;
 
-      // Check if any extra fields were provided
-      if (Object.keys(rest).length > 0) {
-        return res.status(400).json({ 
-          message: "Request body should only contain 'customerId' field",
-          received: Object.keys(req.body),
-          allowedFields: ["customerId"],
-          extraFields: Object.keys(rest)
-        });
-      }
-
-      // Validate request body
-      if (!req.body || typeof req.body !== 'object') {
-        return res.status(400).json({ 
-          message: "Invalid request body. Expected JSON object with 'customerId' field"
-        });
-      }
-
-      // customerId is REQUIRED in request body
-      if (!bodyCustomerId) {
-        return res.status(400).json({ 
-          message: "Customer ID is required in request body",
-          received: req.body,
-          requiredFields: ["customerId"]
-        });
-      }
-
-      const customerId = bodyCustomerId;
-
-      // Validate customerId format - must be a non-empty string
-      if (typeof customerId !== 'string' || customerId.trim() === '') {
-        return res.status(400).json({ 
-          message: "Customer ID must be a non-empty string",
-          received: { customerId, customerIdType: typeof customerId }
-        });
-      }
-
-      trimmedCustomerId = String(customerId).trim();
-
-      // Security check: customerId in body must match the authenticated user's ID
-      if (req.user && trimmedCustomerId !== req.user.id) {
-        return res.status(403).json({
-          message: "Customer ID in request body must match the authenticated user's ID",
-          providedCustomerId: trimmedCustomerId,
-          authenticatedUserId: req.user.id
-        });
-      }
-
-      // Fetch customer profile
-      const customer = await prisma.user.findUnique({
-        where: { id: trimmedCustomerId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
-
-      if (!customer) {
-        return res.status(404).json({ 
-          message: "Customer not found",
-          customerId: trimmedCustomerId
-        });
-      }
-
-      if (customer.role !== "CUSTOMER") {
-        return res.status(403).json({ 
-          message: "User is not a customer",
-          customerId: trimmedCustomerId,
-          role: customer.role
-        });
-      }
-
-      console.log(`Customer profile fetched successfully: ${trimmedCustomerId}`);
-
-      res.json({
-        success: true,
-        profile: customer,
-        customerId: trimmedCustomerId
-      });
-    } catch (error: any) {
-      console.error("Error fetching customer profile:", error);
-      
-      res.status(500).json({
-        message: "Failed to fetch customer profile",
-        error: error.message,
-        customerId: trimmedCustomerId || req.body?.customerId || "unknown"
+    // Extra safety: ensure userId is present
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: "Authentication failed. User ID not found in token.",
+          code: "AUTHENTICATION_FAILED",
+        },
       });
     }
+
+    // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
+    const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
+
+    // Validate customerId format - must be a non-empty string
+    if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Customer ID must be a non-empty string",
+          code: "VALIDATION_ERROR",
+        },
+      });
+    }
+
+    const trimmedCustomerId = String(profileCustomerId).trim();
+
+    // If customerId/userId is provided in body, it must match the authenticated user
+    if (req.body.customerId || req.body.userId) {
+      if (trimmedCustomerId !== authenticatedUserId) {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: "You are not allowed to view profile for another user",
+            code: "FORBIDDEN",
+          },
+        });
+      }
+    }
+
+    // Fetch customer profile
+    const customer = await prisma.user.findUnique({
+      where: { id: trimmedCustomerId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: "Customer not found",
+          code: "NOT_FOUND",
+          customerId: trimmedCustomerId,
+        },
+      });
+    }
+
+    // Final defense-in-depth check: ensure role is CUSTOMER
+    if (customer.role !== "CUSTOMER") {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: "User is not a customer",
+          code: "FORBIDDEN",
+          requiredRole: "CUSTOMER",
+          userRole: customer.role,
+        },
+      });
+    }
+
+    // Final security check: ensure the customer ID matches authenticated user
+    if (customer.id !== authenticatedUserId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: "You are not allowed to view profile for another user",
+          code: "FORBIDDEN",
+        },
+      });
+    }
+
+    console.log(`Customer profile fetched successfully: ${trimmedCustomerId}`);
+
+    res.json({
+      success: true,
+      data: customer,
+      customerId: trimmedCustomerId,
+    });
   }
 );
 

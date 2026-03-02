@@ -163,14 +163,3 @@ model OrderItem {
   price     Decimal
   quantity  Int
 }
-
-model Faq {
-  id        String   @id @default(uuid())
-  question  String
-  answer    String
-  category  String?  // Optional category for grouping FAQs
-  order     Int      @default(0) // For custom ordering
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}

@@ -4,6 +4,7 @@ export type AuthUser = {
   id: string;
   role: Role;
   email: string;
+  name?: string | null;
 };
 
 declare global {

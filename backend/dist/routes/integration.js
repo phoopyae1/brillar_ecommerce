@@ -4,6 +4,7 @@ exports.integrationRouter = void 0;
 const express_1 = require("express");
 const UserIntegration_1 = require("../models/UserIntegration");
 const AdminIntegration_1 = require("../models/AdminIntegration");
+const PublicIntegration_1 = require("../models/PublicIntegration");
 const mongodb_1 = require("../mongodb");
 exports.integrationRouter = (0, express_1.Router)();
 // Ensure MongoDB connection
@@ -25,9 +26,9 @@ exports.integrationRouter.post("/", async (req, res) => {
                 message: "contextKey, iframeOrScript, and role are required"
             });
         }
-        if (role !== "user" && role !== "admin") {
+        if (role !== "user" && role !== "admin" && role !== "public") {
             return res.status(400).json({
-                message: "role must be either 'user' or 'admin'"
+                message: "role must be either 'user', 'admin', or 'public'"
             });
         }
         const integrationData = {
@@ -58,7 +59,7 @@ exports.integrationRouter.post("/", async (req, res) => {
                 replaced: !isNew
             });
         }
-        else {
+        else if (role === "admin") {
             // Check if any integration exists
             const existingCount = await AdminIntegration_1.AdminIntegration.countDocuments({});
             const isNew = existingCount === 0;
@@ -66,6 +67,27 @@ exports.integrationRouter.post("/", async (req, res) => {
             await AdminIntegration_1.AdminIntegration.deleteMany({});
             // Create the new integration (only one document will exist)
             const integration = await AdminIntegration_1.AdminIntegration.create(integrationData);
+            return res.status(200).json({
+                message: isNew
+                    ? "Integration created successfully"
+                    : "Integration replaced successfully (all previous data removed)",
+                integration: {
+                    id: integration._id,
+                    contextKey: integration.contextKey,
+                    iframeOrScript: integration.iframeOrScript,
+                    role,
+                    createdAt: integration.createdAt,
+                    updatedAt: integration.updatedAt
+                },
+                replaced: !isNew
+            });
+        }
+        else {
+            // Public integration
+            const existingCount = await PublicIntegration_1.PublicIntegration.countDocuments({});
+            const isNew = existingCount === 0;
+            await PublicIntegration_1.PublicIntegration.deleteMany({});
+            const integration = await PublicIntegration_1.PublicIntegration.create(integrationData);
             return res.status(200).json({
                 message: isNew
                     ? "Integration created successfully"
@@ -94,9 +116,9 @@ exports.integrationRouter.post("/", async (req, res) => {
 exports.integrationRouter.get("/:role", async (req, res) => {
     try {
         const { role } = req.params;
-        if (role !== "user" && role !== "admin") {
+        if (role !== "user" && role !== "admin" && role !== "public") {
             return res.status(400).json({
-                message: "role must be either 'user' or 'admin'"
+                message: "role must be either 'user', 'admin', or 'public'"
             });
         }
         if (role === "user") {
@@ -115,8 +137,25 @@ exports.integrationRouter.get("/:role", async (req, res) => {
                 updatedAt: integration.updatedAt
             });
         }
-        else {
+        else if (role === "admin") {
             const integration = await AdminIntegration_1.AdminIntegration.findOne({});
+            if (!integration) {
+                return res.status(404).json({
+                    message: "Integration not found"
+                });
+            }
+            return res.json({
+                id: integration._id,
+                contextKey: integration.contextKey,
+                iframeOrScript: integration.iframeOrScript,
+                role,
+                createdAt: integration.createdAt,
+                updatedAt: integration.updatedAt
+            });
+        }
+        else {
+            // Public integration
+            const integration = await PublicIntegration_1.PublicIntegration.findOne({});
             if (!integration) {
                 return res.status(404).json({
                     message: "Integration not found"
@@ -144,9 +183,9 @@ exports.integrationRouter.get("/:role", async (req, res) => {
 exports.integrationRouter.delete("/:role", async (req, res) => {
     try {
         const { role } = req.params;
-        if (role !== "user" && role !== "admin") {
+        if (role !== "user" && role !== "admin" && role !== "public") {
             return res.status(400).json({
-                message: "role must be either 'user' or 'admin'"
+                message: "role must be either 'user', 'admin', or 'public'"
             });
         }
         if (role === "user") {
@@ -160,8 +199,20 @@ exports.integrationRouter.delete("/:role", async (req, res) => {
                 message: "Integration deleted successfully"
             });
         }
-        else {
+        else if (role === "admin") {
             const result = await AdminIntegration_1.AdminIntegration.deleteMany({});
+            if (result.deletedCount === 0) {
+                return res.status(404).json({
+                    message: "Integration not found"
+                });
+            }
+            return res.json({
+                message: "Integration deleted successfully"
+            });
+        }
+        else {
+            // Public integration
+            const result = await PublicIntegration_1.PublicIntegration.deleteMany({});
             if (result.deletedCount === 0) {
                 return res.status(404).json({
                     message: "Integration not found"

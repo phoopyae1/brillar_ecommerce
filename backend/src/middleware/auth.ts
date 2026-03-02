@@ -9,20 +9,134 @@ export type TokenPayload = {
   email: string;
 };
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+
+  // Special handling for customer-agent endpoints used by chat/AI tools:
+  // If there is NO Authorization header but a userId/customerId is provided in the body/query,
+  // we authenticate using that userId (only for CUSTOMER role).
+  const isCustomerAgentRoute =
+    (req.baseUrl && req.baseUrl.includes('customer-agent')) ||
+    (req.originalUrl && req.originalUrl.includes('/api/customer-agent')) ||
+    (req.path && req.path.startsWith('/api/customer-agent'));
+
+  const userIdFromBody = req.body?.userId || req.body?.customerId;
+  const userIdFromQuery = req.query?.userId || req.query?.customerId;
+
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development' && isCustomerAgentRoute) {
+    console.log('Customer-agent route detected:', {
+      baseUrl: req.baseUrl,
+      originalUrl: req.originalUrl,
+      path: req.path,
+      hasAuthHeader: !!authHeader,
+      hasUserIdInBody: !!userIdFromBody,
+      hasUserIdInQuery: !!userIdFromQuery
+    });
+  }
+
+  if (!authHeader && isCustomerAgentRoute && (userIdFromBody || userIdFromQuery)) {
+    try {
+      const userId = userIdFromBody || userIdFromQuery;
+      
+      // Handle both string UUIDs and numeric IDs
+      let customerId: string;
+      if (typeof userId === 'string') {
+        customerId = userId.trim();
+        if (customerId === '') {
+          return res.status(401).json({
+            success: false,
+            error: {
+              message: 'Invalid userId provided for authentication',
+              code: 'INVALID_USER_ID'
+            }
+          });
+        }
+      } else if (typeof userId === 'number') {
+        customerId = String(userId);
+      } else {
+        return res.status(401).json({
+          success: false,
+          error: {
+            message: 'Invalid userId provided for authentication',
+            code: 'INVALID_USER_ID'
+          }
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: customerId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          name: true,
+        }
+      });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: {
+            message: 'User account not found. Please log in again.',
+            code: 'USER_NOT_FOUND'
+          }
+        });
+      }
+
+      if (user.role !== 'CUSTOMER') {
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: 'This endpoint is only accessible to customers',
+            code: 'FORBIDDEN',
+            requiredRole: 'CUSTOMER',
+            userRole: user.role,
+          }
+        });
+      }
+
+      // Attach user to request and continue without JWT
+      req.user = {
+        id: user.id,
+        email: user.email,
+        role: user.role as any,
+        name: user.name || null,
+      };
+
+      console.log(`User authenticated via userId for customer-agent route: ${user.id} (${user.email})`);
+      return next();
+    } catch (err: any) {
+      console.error('Error during userId-based authentication:', err);
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: 'Authentication failed. Please try again.',
+          code: 'AUTHENTICATION_FAILED'
+        }
+      });
+    }
+  }
+
+  // Standard JWT-based authentication
   if (!authHeader) {
     return res.status(401).json({ 
-      message: "Missing authorization header",
-      error: "AUTHORIZATION_HEADER_MISSING"
+      success: false,
+      error: {
+        message: "Missing authorization header",
+        code: "AUTHORIZATION_HEADER_MISSING"
+      }
     });
   }
 
   if (!authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ 
-      message: "Invalid authorization header format. Expected 'Bearer <token>'",
-      error: "INVALID_AUTHORIZATION_FORMAT",
-      received: authHeader.substring(0, 20) + "..."
+      success: false,
+      error: {
+        message: "Invalid authorization header format. Expected 'Bearer <token>'",
+        code: "INVALID_AUTHORIZATION_FORMAT",
+        received: authHeader.substring(0, 20) + "..."
+      }
     });
   }
 
@@ -30,8 +144,11 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   
   if (!token) {
     return res.status(401).json({ 
-      message: "Token is empty",
-      error: "EMPTY_TOKEN"
+      success: false,
+      error: {
+        message: "Token is empty",
+        code: "EMPTY_TOKEN"
+      }
     });
   }
 
@@ -42,12 +159,55 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     if (!payload.sub || !payload.role || !payload.email) {
       console.error("Token payload missing required fields:", payload);
       return res.status(401).json({ 
-        message: "Token payload is invalid",
-        error: "INVALID_TOKEN_PAYLOAD"
+        success: false,
+        error: {
+          message: "Token payload is invalid",
+          code: "INVALID_TOKEN_PAYLOAD"
+        }
       });
     }
 
-    req.user = { id: payload.sub, role: payload.role as any, email: payload.email };
+    // Verify user still exists in database and get latest user data
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+      }
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: 'User account not found. Token is invalid.',
+          code: 'USER_NOT_FOUND'
+        }
+      });
+    }
+
+    // Verify email matches (additional security check)
+    if (payload.email && payload.email !== user.email) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          message: 'Token email mismatch. Please log in again.',
+          code: 'TOKEN_EMAIL_MISMATCH'
+        }
+      });
+    }
+
+    // Use database user data (more reliable than token payload)
+    // This ensures role changes are reflected immediately
+    req.user = { 
+      id: user.id, 
+      role: user.role as any, 
+      email: user.email,
+      name: user.name || null
+    };
+    
     return next();
   } catch (error: any) {
     // Provide more specific error messages
@@ -58,8 +218,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
       errorMessage = "Token has expired. Please log in again or refresh your token.";
       errorCode = "TOKEN_EXPIRED";
     } else if (error.name === "JsonWebTokenError") {
-      errorMessage = "Token is malformed or invalid.";
-      errorCode = "MALFORMED_TOKEN";
+      errorMessage = "Invalid token format";
+      errorCode = "INVALID_TOKEN_FORMAT";
     } else if (error.name === "NotBeforeError") {
       errorMessage = "Token is not active yet.";
       errorCode = "TOKEN_NOT_ACTIVE";
@@ -72,9 +232,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     });
 
     return res.status(401).json({ 
-      message: errorMessage,
-      error: errorCode,
-      details: process.env.NODE_ENV === "development" ? error.message : undefined
+      success: false,
+      error: {
+        message: errorMessage,
+        code: errorCode,
+        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      }
     });
   }
 }
@@ -97,10 +260,24 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
 export function requireRole(role: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return res.status(401).json({ 
+        success: false,
+        error: {
+          message: "Unauthorized - User not authenticated",
+          code: "UNAUTHORIZED"
+        }
+      });
     }
     if (req.user.role !== role) {
-      return res.status(403).json({ message: "Forbidden" });
+      return res.status(403).json({ 
+        success: false,
+        error: {
+          message: `Forbidden - Requires role: ${role}. Your role: ${req.user.role}`,
+          code: "FORBIDDEN",
+          requiredRole: role,
+          userRole: req.user.role
+        }
+      });
     }
     return next();
   };
@@ -208,7 +385,16 @@ export async function tryRefreshToken(req: Request, res: Response, next: NextFun
         req.headers.authorization = `Bearer ${newAccessToken}`;
         
         // Set user in request for downstream middleware
-        req.user = { id: user.id, role: user.role as any, email: user.email };
+        const userWithName = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { id: true, email: true, role: true, name: true }
+        });
+        req.user = { 
+          id: userWithName!.id, 
+          role: userWithName!.role as any, 
+          email: userWithName!.email,
+          name: userWithName!.name || null
+        };
         
         console.log(`Token refreshed for user: ${user.email}`);
         return next();
