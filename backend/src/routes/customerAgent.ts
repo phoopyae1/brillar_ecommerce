@@ -7,6 +7,30 @@ import bcrypt from "bcryptjs";
 
 export const customerAgentRouter = Router();
 
+// Helper function to detect card brand from card number
+function getCardBrand(cardNumber: string): string {
+  const cleaned = cardNumber.replace(/\s|-/g, '');
+  
+  // Visa: starts with 4
+  if (/^4/.test(cleaned)) {
+    return "VISA";
+  }
+  // Mastercard: starts with 5 or 2
+  if (/^5[1-5]/.test(cleaned) || /^2[2-7]/.test(cleaned)) {
+    return "MASTERCARD";
+  }
+  // American Express: starts with 34 or 37
+  if (/^3[47]/.test(cleaned)) {
+    return "AMEX";
+  }
+  // Discover: starts with 6
+  if (/^6/.test(cleaned)) {
+    return "DISCOVER";
+  }
+  
+  return "UNKNOWN";
+}
+
 // POST endpoint to get all products with prices - Customer only
 customerAgentRouter.post(
   "/product-list",
@@ -1283,8 +1307,8 @@ customerAgentRouter.post(
     }
 
     try {
-      // Extract items from request body
-      const { items } = req.body;
+      // Extract items and payment information from request body
+      const { items, cardNumber, cvv, expiryMonth, expiryYear, cardholderName, billingAddress } = req.body;
 
       // items is REQUIRED
       if (!items || !Array.isArray(items) || items.length === 0) {
@@ -1292,6 +1316,95 @@ customerAgentRouter.post(
           success: false,
           error: {
             message: "Items array is required and must not be empty",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      // Validate payment card information
+      if (!cardNumber || typeof cardNumber !== 'string' || cardNumber.trim() === '') {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Card number is required",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      // Validate card number format (remove spaces and dashes, check if numeric and length)
+      const cleanedCardNumberForValidation = cardNumber.replace(/\s|-/g, '');
+      if (!/^\d+$/.test(cleanedCardNumberForValidation) || cleanedCardNumberForValidation.length < 13 || cleanedCardNumberForValidation.length > 19) {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Invalid card number format. Card number must be 13-19 digits",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      if (!cvv || typeof cvv !== 'string' || cvv.trim() === '') {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "CVV is required",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      // Validate CVV format (3-4 digits)
+      const cleanedCvv = cvv.trim();
+      if (!/^\d{3,4}$/.test(cleanedCvv)) {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Invalid CVV format. CVV must be 3-4 digits",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      if (!expiryMonth || typeof expiryMonth !== 'number' || expiryMonth < 1 || expiryMonth > 12) {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Expiry month is required and must be between 1 and 12",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      if (!expiryYear || typeof expiryYear !== 'number' || expiryYear < new Date().getFullYear()) {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Expiry year is required and must be a valid future year",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      // Check if card is expired
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Card has expired",
+            code: "VALIDATION_ERROR",
+          },
+        });
+      }
+
+      if (!cardholderName || typeof cardholderName !== 'string' || cardholderName.trim() === '') {
+        return res.status(400).json({ 
+          success: false,
+          error: {
+            message: "Cardholder name is required",
             code: "VALIDATION_ERROR",
           },
         });
@@ -1543,6 +1656,14 @@ customerAgentRouter.post(
         return statusMap[status] || status;
       };
 
+      // Mask card number for security (show only last 4 digits)
+      const cleanedCardNumber = cardNumber.replace(/\s|-/g, '');
+      const maskedCardNumber = `**** **** **** ${cleanedCardNumber.slice(-4)}`;
+
+      // TODO: In production, integrate with payment gateway (Stripe, PayPal, etc.)
+      // Process payment here - for now, we assume payment is successful
+      console.log(`Processing payment for order: Card ending in ${cleanedCardNumber.slice(-4)}, Amount: $${Number(order.total).toFixed(2)}`);
+
       const TAX_RATE = 0.1;
       const formattedOrder = {
         ...order,
@@ -1550,13 +1671,29 @@ customerAgentRouter.post(
         statusText: getStatusText(order.status),
         totalWithTax: Number(order.total) * (1 + TAX_RATE),
         taxAmount: Number(order.total) * TAX_RATE,
-        subtotal: Number(order.total)
+        subtotal: Number(order.total),
+        payment: {
+          method: "CARD",
+          cardLast4: cleanedCardNumber.slice(-4),
+          cardBrand: getCardBrand(cleanedCardNumber), // Visa, Mastercard, etc.
+          expiryMonth,
+          expiryYear,
+          cardholderName: cardholderName.trim(),
+          billingAddress: billingAddress || null
+        }
       };
 
       res.status(201).json({
         success: true,
         order: formattedOrder,
-        customerId: trimmedCustomerId
+        customerId: trimmedCustomerId,
+        paymentInfo: {
+          maskedCardNumber,
+          cardLast4: cleanedCardNumber.slice(-4),
+          expiryMonth,
+          expiryYear,
+          cardholderName: cardholderName.trim()
+        }
       });
     } catch (error: any) {
       console.error("Error creating order:", error);
