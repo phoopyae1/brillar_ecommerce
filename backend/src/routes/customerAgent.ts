@@ -31,16 +31,16 @@ customerAgentRouter.post(
     // Use customerId or userId from request body if provided, otherwise use authenticated user's ID
     const profileCustomerId = req.body.customerId || req.body.userId || authenticatedUserId;
 
-    // Validate customerId format - must be a non-empty string
+      // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
           code: "VALIDATION_ERROR",
         },
-      });
-    }
+        });
+      }
 
     const trimmedCustomerId = String(profileCustomerId).trim();
 
@@ -58,25 +58,25 @@ customerAgentRouter.post(
     }
 
     // Verify customer exists and is a customer
-    try {
-      const customer = await prisma.user.findUnique({
-        where: { id: trimmedCustomerId },
-        select: { id: true, role: true, email: true }
-      });
+      try {
+        const customer = await prisma.user.findUnique({
+          where: { id: trimmedCustomerId },
+          select: { id: true, role: true, email: true }
+        });
 
-      if (!customer) {
-        return res.status(404).json({
+        if (!customer) {
+          return res.status(404).json({ 
           success: false,
           error: {
             message: "Customer not found",
             code: "NOT_FOUND",
             customerId: trimmedCustomerId,
           },
-        });
-      }
+          });
+        }
 
-      if (customer.role !== "CUSTOMER") {
-        return res.status(403).json({
+        if (customer.role !== "CUSTOMER") {
+          return res.status(403).json({ 
           success: false,
           error: {
             message: "User is not a customer",
@@ -84,21 +84,21 @@ customerAgentRouter.post(
             requiredRole: "CUSTOMER",
             userRole: customer.role,
           },
-        });
-      }
+          });
+        }
 
-      console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
-    } catch (customerError: any) {
-      console.error("Error verifying customer:", customerError);
-      return res.status(500).json({
+        console.log(`Customer verified: ${trimmedCustomerId} (${customer.email})`);
+      } catch (customerError: any) {
+        console.error("Error verifying customer:", customerError);
+        return res.status(500).json({
         success: false,
         error: {
           message: "Failed to verify customer",
           code: "INTERNAL_ERROR",
           customerId: trimmedCustomerId,
         },
-      });
-    }
+        });
+      }
 
     try {
       // Build where clause - only show active products
@@ -235,7 +235,7 @@ customerAgentRouter.post(
       res.status(500).json({
         success: false,
         error: {
-          message: "Failed to fetch product list",
+        message: "Failed to fetch product list",
           code: "INTERNAL_ERROR",
           customerId: trimmedCustomerId || "unknown"
         },
@@ -315,7 +315,7 @@ customerAgentRouter.post(
 
     // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
@@ -480,7 +480,7 @@ customerAgentRouter.post(
       res.status(500).json({
         success: false,
         error: {
-          message: "Failed to fetch orders list",
+        message: "Failed to fetch orders list",
           code: "INTERNAL_ERROR",
           customerId: trimmedCustomerId || "unknown"
         },
@@ -515,7 +515,7 @@ customerAgentRouter.post(
 
     // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
@@ -692,7 +692,7 @@ customerAgentRouter.post(
       res.status(500).json({
         success: false,
         error: {
-          message: "Failed to fetch order details",
+        message: "Failed to fetch order details",
           code: "INTERNAL_ERROR",
           customerId: trimmedCustomerId || "unknown"
         },
@@ -741,7 +741,7 @@ customerAgentRouter.post(
 
     // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
@@ -814,10 +814,10 @@ customerAgentRouter.post(
 
       // Either orderId OR productName is REQUIRED in request body
       if (!orderId && !productName) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
-            message: "Either 'orderId' or 'productName' is required in request body",
+          message: "Either 'orderId' or 'productName' is required in request body",
             code: "VALIDATION_ERROR",
           },
         });
@@ -825,10 +825,10 @@ customerAgentRouter.post(
 
       // Cannot provide both orderId and productName
       if (orderId && productName) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
-            message: "Please provide either 'orderId' OR 'productName', not both",
+          message: "Please provide either 'orderId' OR 'productName', not both",
             code: "VALIDATION_ERROR",
           },
         });
@@ -839,10 +839,10 @@ customerAgentRouter.post(
       // If productName is provided, find the most recent order containing that product
       if (productName) {
         if (typeof productName !== 'string' || productName.trim() === '') {
-          return res.status(400).json({
+          return res.status(400).json({ 
             success: false,
             error: {
-              message: "Product name must be a non-empty string",
+            message: "Product name must be a non-empty string",
               code: "VALIDATION_ERROR",
             },
           });
@@ -874,13 +874,13 @@ customerAgentRouter.post(
           });
 
           if (ordersWithProduct.length === 0) {
-            return res.status(404).json({
+            return res.status(404).json({ 
               success: false,
               error: {
-                message: "No order found containing a product with that name",
+              message: "No order found containing a product with that name",
                 code: "NOT_FOUND",
-                productName: trimmedProductName,
-                customerId: trimmedCustomerId,
+              productName: trimmedProductName,
+              customerId: trimmedCustomerId,
               },
             });
           }
@@ -903,13 +903,13 @@ customerAgentRouter.post(
             `;
             
             if (rawOrders.length === 0) {
-              return res.status(404).json({
+              return res.status(404).json({ 
                 success: false,
                 error: {
-                  message: "No order found containing a product with that name",
+                message: "No order found containing a product with that name",
                   code: "NOT_FOUND",
-                  productName: trimmedProductName,
-                  customerId: trimmedCustomerId,
+                productName: trimmedProductName,
+                customerId: trimmedCustomerId,
                 },
               });
             }
@@ -923,10 +923,10 @@ customerAgentRouter.post(
       } else {
         // Validate orderId format
         if (typeof orderId !== 'string' || orderId.trim() === '') {
-          return res.status(400).json({
+          return res.status(400).json({ 
             success: false,
             error: {
-              message: "Order ID must be a non-empty string",
+            message: "Order ID must be a non-empty string",
               code: "VALIDATION_ERROR",
             },
           });
@@ -985,22 +985,22 @@ customerAgentRouter.post(
       }
 
       if (!order) {
-        return res.status(404).json({
+        return res.status(404).json({ 
           success: false,
           error: {
-            message: "Order not found",
+          message: "Order not found",
             code: "NOT_FOUND",
-            orderId: trimmedOrderId,
-            customerId: trimmedCustomerId,
+          orderId: trimmedOrderId,
+          customerId: trimmedCustomerId,
           },
         });
       }
 
       if (!order.items || order.items.length === 0) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
-            message: "Order has no items to add to cart",
+          message: "Order has no items to add to cart",
             code: "VALIDATION_ERROR",
             orderId: trimmedOrderId,
           },
@@ -1054,16 +1054,11 @@ customerAgentRouter.post(
           }
 
           // Check inventory availability
-          const column = orderItem.variantId ? "variantId" : "productId";
-          const inventoryRows = await prisma.$queryRaw<any[]>(
-            Prisma.sql`
-              SELECT * FROM "Inventory"
-              WHERE ${Prisma.raw(`"${column}"`)} = ${orderItem.variantId ?? orderItem.productId}
-              LIMIT 1
-            `
-          );
-
-          const inventory = inventoryRows[0];
+          const inventory = await prisma.inventory.findFirst({
+            where: orderItem.variantId
+              ? { variantId: orderItem.variantId }
+              : { productId: orderItem.productId },
+          });
           if (!inventory) {
             skippedItems.push({
               productId: orderItem.productId,
@@ -1089,21 +1084,16 @@ customerAgentRouter.post(
 
           // Add item to cart with inventory reservation
           await prisma.$transaction(async (tx) => {
-            // Lock inventory row
-            const lockedInventory = await tx.$queryRaw<any[]>(
-              Prisma.sql`
-                SELECT * FROM "Inventory"
-                WHERE ${Prisma.raw(`"${column}"`)} = ${orderItem.variantId ?? orderItem.productId}
-                LIMIT 1
-                FOR UPDATE
-              `
-            );
+            // Find inventory row (transaction will handle locking on update)
+            const inv = await tx.inventory.findFirst({
+              where: orderItem.variantId
+                ? { variantId: orderItem.variantId }
+                : { productId: orderItem.productId },
+            });
 
-            if (!lockedInventory[0]) {
+            if (!inv) {
               throw new Error("Inventory not found");
             }
-
-            const inv = lockedInventory[0];
             const adjustment = reserveInventory(inv, orderItem.quantity);
 
             await tx.inventory.update({
@@ -1190,7 +1180,7 @@ customerAgentRouter.post(
       res.status(500).json({
         success: false,
         error: {
-          message: "Failed to add items to cart",
+        message: "Failed to add items to cart",
           code: "INTERNAL_ERROR",
           customerId: trimmedCustomerId || "unknown",
         },
@@ -1225,7 +1215,7 @@ customerAgentRouter.post(
 
     // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
@@ -1298,7 +1288,7 @@ customerAgentRouter.post(
 
       // items is REQUIRED
       if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
             message: "Items array is required and must not be empty",
@@ -1312,29 +1302,29 @@ customerAgentRouter.post(
         const item = items[i];
         // Either productId OR productName is required
         if (!item.productId && !item.productName) {
-          return res.status(400).json({
+          return res.status(400).json({ 
             success: false,
             error: {
-              message: `Item at index ${i} must have either 'productId' or 'productName'`,
+            message: `Item at index ${i} must have either 'productId' or 'productName'`,
               code: "VALIDATION_ERROR",
             },
           });
         }
         // Cannot provide both
         if (item.productId && item.productName) {
-          return res.status(400).json({
+          return res.status(400).json({ 
             success: false,
             error: {
-              message: `Item at index ${i} cannot have both 'productId' and 'productName'. Please provide only one.`,
+            message: `Item at index ${i} cannot have both 'productId' and 'productName'. Please provide only one.`,
               code: "VALIDATION_ERROR",
             },
           });
         }
         if (!item.quantity || typeof item.quantity !== 'number' || item.quantity <= 0) {
-          return res.status(400).json({
+          return res.status(400).json({ 
             success: false,
             error: {
-              message: `Item at index ${i} must have a positive 'quantity'`,
+            message: `Item at index ${i} must have a positive 'quantity'`,
               code: "VALIDATION_ERROR",
             },
           });
@@ -1351,17 +1341,25 @@ customerAgentRouter.post(
           let product: any = null;
           
           if (item.productId) {
-            // Find by productId
+            // Find by productId with variants
             product = await tx.product.findUnique({
               where: { id: item.productId },
-              select: { id: true, name: true, price: true, status: true }
+              select: { 
+                id: true, 
+                name: true, 
+                price: true, 
+                status: true,
+                variants: {
+                  select: { id: true, priceOverride: true, sku: true }
+                }
+              }
             });
 
             if (!product) {
               throw new Error(`Product not found: ${item.productId}`);
             }
           } else if (item.productName) {
-            // Find by productName (with optional category)
+            // Find by productName (with optional category) with variants
             const productWhere: any = { name: item.productName.trim() };
             if (item.category) {
               productWhere.category = item.category.trim();
@@ -1369,7 +1367,16 @@ customerAgentRouter.post(
             
             const matchingProducts = await tx.product.findMany({
               where: productWhere,
-              select: { id: true, name: true, price: true, status: true, category: true }
+              select: { 
+                id: true, 
+                name: true, 
+                price: true, 
+                status: true, 
+                category: true,
+                variants: {
+                  select: { id: true, priceOverride: true, sku: true }
+                }
+              }
             });
 
             if (matchingProducts.length === 0) {
@@ -1389,39 +1396,71 @@ customerAgentRouter.post(
             throw new Error(`Product ${product.name} is not available`);
           }
 
-          // Get variant if provided
-          const variant = item.variantId
-            ? await tx.productVariant.findUnique({ 
+          console.log(`Product found: ${product.name} (ID: ${product.id}, Category: ${product.category || 'N/A'}, Variants: ${product.variants?.length || 0})`);
+
+          // Get variant if provided, or use first variant if product has variants
+          let variant = null;
+          
+          if (item.variantId) {
+            variant = await tx.productVariant.findUnique({ 
                 where: { id: item.variantId },
                 select: { id: true, priceOverride: true, sku: true, productId: true }
-              })
-            : null;
+            });
 
-          if (item.variantId && !variant) {
+            if (!variant) {
             throw new Error(`Variant not found: ${item.variantId}`);
           }
 
-          if (variant && variant.productId !== product.id) {
+            if (variant.productId !== product.id) {
             throw new Error(`Variant does not belong to product ${product.id}`);
+            }
+          } else if (product.variants && product.variants.length > 0) {
+            // Product has variants but no variantId specified - use first variant
+            const firstVariant = await tx.productVariant.findUnique({
+              where: { id: product.variants[0].id },
+              select: { id: true, priceOverride: true, sku: true, productId: true }
+            });
+            variant = firstVariant;
+            console.log(`No variantId specified, using first variant: ${variant?.id} (SKU: ${variant?.sku})`);
           }
 
           const price = Number(variant?.priceOverride ?? product.price);
           total += price * item.quantity;
 
-          // Check and consume inventory
-          const column = item.variantId ? "variantId" : "productId";
-          const inventoryRows = await tx.$queryRaw<any[]>(
-            Prisma.sql`
-              SELECT * FROM "Inventory"
-              WHERE ${Prisma.raw(`"${column}"`)} = ${item.variantId ?? product.id}
-              LIMIT 1
-              FOR UPDATE
-            `
-          );
+          // Check and consume inventory - use variant if available, otherwise product
+          // Products with variants store inventory at variant level, not product level
+          const inventoryWhere = variant
+            ? { variantId: variant.id }
+            : { productId: product.id };
+          
+          console.log(`Looking for inventory with:`, inventoryWhere, variant ? `(variant: ${variant.id})` : `(product: ${product.id})`);
+          
+          let inventory = await tx.inventory.findFirst({
+            where: inventoryWhere,
+          });
 
-          const inventory = inventoryRows[0];
           if (!inventory) {
-            throw new Error(`Inventory not found for ${item.variantId ? 'variant' : 'product'}: ${item.variantId ?? product.id}`);
+            const inventoryId = variant ? variant.id : product.id;
+            console.warn(`Inventory not found for ${variant ? 'variant' : 'product'}: ${inventoryId}. Creating with 0 stock.`);
+            // Create inventory record if it doesn't exist (with 0 stock)
+            inventory = await tx.inventory.create({
+              data: variant
+                ? {
+                    variantId: variant.id,
+                    productId: null,
+                    quantityOnHand: 0,
+                    quantityReserved: 0,
+                  }
+                : {
+                    productId: product.id,
+                    variantId: null,
+                    quantityOnHand: 0,
+                    quantityReserved: 0,
+                  },
+            });
+            console.log(`Created inventory record for ${variant ? 'variant' : 'product'}: ${inventoryId}`);
+          } else {
+            console.log(`Found inventory: ID=${inventory.id}, OnHand=${inventory.quantityOnHand}, Reserved=${inventory.quantityReserved}`);
           }
 
           const availableStock = inventory.quantityOnHand - inventory.quantityReserved;
@@ -1429,7 +1468,9 @@ customerAgentRouter.post(
             throw new Error(`Insufficient stock for ${product.name}. Available: ${availableStock}, Requested: ${item.quantity}`);
           }
 
-          const adjustment = consumeInventory(inventory, item.quantity);
+          // For direct orders (not from cart), use adjustInventory to reduce quantityOnHand
+          // without requiring reservation
+          const adjustment = adjustInventory(inventory, -item.quantity);
           await tx.inventory.update({
             where: { id: inventory.id },
             data: {
@@ -1558,7 +1599,7 @@ customerAgentRouter.post(
 
     // Validate customerId format - must be a non-empty string
     if (typeof profileCustomerId !== 'string' || profileCustomerId.trim() === '') {
-      return res.status(400).json({
+        return res.status(400).json({ 
         success: false,
         error: {
           message: "Customer ID must be a non-empty string",
@@ -1631,7 +1672,7 @@ customerAgentRouter.post(
 
       // orderId is REQUIRED
       if (!orderId) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
             message: "Order ID is required in request body",
@@ -1642,10 +1683,10 @@ customerAgentRouter.post(
 
       // Validate orderId format
       if (typeof orderId !== 'string' || orderId.trim() === '') {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
-            message: "Order ID must be a non-empty string",
+          message: "Order ID must be a non-empty string",
             code: "VALIDATION_ERROR",
           },
         });
@@ -1701,13 +1742,13 @@ customerAgentRouter.post(
       }
 
       if (!order) {
-        return res.status(404).json({
+        return res.status(404).json({ 
           success: false,
           error: {
-            message: "Order not found",
+          message: "Order not found",
             code: "NOT_FOUND",
-            orderId: trimmedOrderId,
-            customerId: trimmedCustomerId,
+          orderId: trimmedOrderId,
+          customerId: trimmedCustomerId,
           },
         });
       }
@@ -1715,13 +1756,13 @@ customerAgentRouter.post(
       // Check if order can be cancelled
       const cancellableStatuses = ["PENDING", "PAID", "PREPARING_TO_SHIP"];
       if (!cancellableStatuses.includes(order.status)) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           error: {
-            message: `Order cannot be cancelled. Current status: ${order.status}`,
+          message: `Order cannot be cancelled. Current status: ${order.status}`,
             code: "VALIDATION_ERROR",
-            orderId: trimmedOrderId,
-            currentStatus: order.status,
+          orderId: trimmedOrderId,
+          currentStatus: order.status,
           },
         });
       }

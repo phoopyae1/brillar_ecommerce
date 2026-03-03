@@ -19,6 +19,7 @@ import { integrationRouter } from "./routes/integration";
 import { adminAgentRouter } from "./routes/adminAgent";
 import { customerAgentRouter } from "./routes/customerAgent";
 import { agentRouter } from "./routes/agent";
+import { publicAgentRouter } from "./routes/publicAgent";
 import { errorHandler } from "./middleware/error-handler";
 
 export const app = express();
@@ -89,6 +90,7 @@ app.use("/api/admin", adminRouter);
 app.use("/api/admin-agent", adminAgentRouter);
 app.use("/api/customer-agent", customerAgentRouter);
 app.use("/api/agent", agentRouter);
+app.use("/api/public", publicAgentRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/integration", integrationRouter);
 

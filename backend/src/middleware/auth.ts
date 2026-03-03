@@ -123,7 +123,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ 
       success: false,
       error: {
-        message: "Missing authorization header",
+      message: "Missing authorization header",
         code: "AUTHORIZATION_HEADER_MISSING"
       }
     });
@@ -133,9 +133,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ 
       success: false,
       error: {
-        message: "Invalid authorization header format. Expected 'Bearer <token>'",
+      message: "Invalid authorization header format. Expected 'Bearer <token>'",
         code: "INVALID_AUTHORIZATION_FORMAT",
-        received: authHeader.substring(0, 20) + "..."
+      received: authHeader.substring(0, 20) + "..."
       }
     });
   }
@@ -146,7 +146,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ 
       success: false,
       error: {
-        message: "Token is empty",
+      message: "Token is empty",
         code: "EMPTY_TOKEN"
       }
     });
@@ -161,7 +161,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       return res.status(401).json({ 
         success: false,
         error: {
-          message: "Token payload is invalid",
+        message: "Token payload is invalid",
           code: "INVALID_TOKEN_PAYLOAD"
         }
       });
@@ -234,9 +234,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ 
       success: false,
       error: {
-        message: errorMessage,
+      message: errorMessage,
         code: errorCode,
-        details: process.env.NODE_ENV === "development" ? error.message : undefined
+      details: process.env.NODE_ENV === "development" ? error.message : undefined
       }
     });
   }

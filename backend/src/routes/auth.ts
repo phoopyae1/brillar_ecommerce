@@ -9,7 +9,7 @@ import { validate } from "../middleware/validate";
 export const authRouter = Router();
 
 function signAccessToken(payload: { sub: string; role: string; email: string }) {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: "15m" });
+  return jwt.sign(payload, config.jwtSecret, { expiresIn: "1d" });
 }
 
 function signRefreshToken(payload: { sub: string }) {
