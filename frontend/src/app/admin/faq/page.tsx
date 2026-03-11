@@ -36,18 +36,9 @@ import SearchIcon from "@mui/icons-material/Search";
 import CloseIcon from "@mui/icons-material/Close";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import type { FAQ } from "@brillar/shared";
 
-type FAQ = {
-  id: string;
-  question: string;
-  answer: string;
-  category: string | null;
-  order: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function AdminFAQPage() {
   const [faqs, setFaqs] = React.useState<FAQ[]>([]);

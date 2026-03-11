@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Box, Button, Container, Grid, Stack, Typography, CircularProgress } from "@mui/material";
 import { ProductCard } from "../components/ProductCard";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import SecurityIcon from "@mui/icons-material/Security";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import { isAuthenticated, getUser } from "../utils/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -38,10 +40,22 @@ const features = [
 ];
 
 export default function HomePage() {
+  const router = useRouter();
   const [featuredProducts, setFeaturedProducts] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [checkingAuth, setCheckingAuth] = React.useState(true);
+
+  // Redirect logged-in customers to account — they should not see the home page
+  React.useEffect(() => {
+    if (isAuthenticated() && getUser()?.role === "CUSTOMER") {
+      router.replace("/account");
+      return;
+    }
+    setCheckingAuth(false);
+  }, [router]);
 
   React.useEffect(() => {
+    if (checkingAuth) return;
     const fetchFeaturedProducts = async () => {
       try {
         setLoading(true);
@@ -71,7 +85,15 @@ export default function HomePage() {
     };
 
     fetchFeaturedProducts();
-  }, []);
+  }, [checkingAuth]);
+
+  if (checkingAuth) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box>

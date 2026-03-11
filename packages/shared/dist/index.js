@@ -1,12 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CheckoutSchema = exports.CartItemSchema = exports.InventoryAdjustSchema = exports.ProductInputSchema = exports.LoginSchema = exports.RegisterSchema = exports.InventoryMovementTypeEnum = exports.OrderStatusEnum = exports.ProductStatusEnum = exports.RoleEnum = void 0;
+exports.FaqSchema = exports.CheckoutSchema = exports.CartItemSchema = exports.InventoryAdjustSchema = exports.ProductInputSchema = exports.LoginSchema = exports.RegisterSchema = exports.InventoryMovementTypeEnum = exports.OrderStatusEnum = exports.ProductStatusEnum = exports.RoleEnum = void 0;
 const zod_1 = require("zod");
 exports.RoleEnum = zod_1.z.enum(["ADMIN", "CUSTOMER"]);
 exports.ProductStatusEnum = zod_1.z.enum(["ACTIVE", "DRAFT"]);
 exports.OrderStatusEnum = zod_1.z.enum([
     "PENDING",
     "PAID",
+    "PREPARING_TO_SHIP",
+    "READY_TO_SHIP",
     "CANCELLED",
     "FULFILLED",
     "REFUNDED"
@@ -32,6 +34,7 @@ exports.ProductInputSchema = zod_1.z.object({
     slug: zod_1.z.string().min(2),
     description: zod_1.z.string().min(10),
     price: zod_1.z.number().positive(),
+    cost: zod_1.z.number().positive().optional(), // Purchase cost for profit calculation
     currency: zod_1.z.string().min(3),
     images: zod_1.z.array(zod_1.z.string().url()).default([]),
     category: zod_1.z.string().min(2),
@@ -58,4 +61,11 @@ exports.CartItemSchema = zod_1.z.object({
 });
 exports.CheckoutSchema = zod_1.z.object({
     paymentMethod: zod_1.z.string().default("SIMULATED")
+});
+exports.FaqSchema = zod_1.z.object({
+    question: zod_1.z.string().min(1, "Question is required"),
+    answer: zod_1.z.string().min(1, "Answer is required"),
+    category: zod_1.z.string().optional().nullable(),
+    order: zod_1.z.number().int().min(0).default(0),
+    isActive: zod_1.z.boolean().default(true)
 });

@@ -23,13 +23,19 @@ type ProcessedIframe = {
   loading?: string | null;
 };
 
+function getInitialAuth() {
+  if (typeof window === "undefined") return { isLoggedIn: false, userRole: null as string | null };
+  const user = getUser();
+  return { isLoggedIn: isAuthenticated(), userRole: user?.role ?? null };
+}
+
 export function IntegrationWidget() {
   const [publicIntegration, setPublicIntegration] = useState<Integration | null>(null);
   const [userIntegration, setUserIntegration] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [processedIframes, setProcessedIframes] = useState<ProcessedIframe[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(getInitialAuth().isLoggedIn);
+  const [userRole, setUserRole] = useState<string | null>(() => getInitialAuth().userRole);
 
   // Check authentication and role
   useEffect(() => {
@@ -56,31 +62,35 @@ export function IntegrationWidget() {
     };
   }, []);
 
-  // Always fetch public integration (no login required)
+  // Fetch public integration only when not logged in (customers/admins only get their own iframe)
   useEffect(() => {
+    if (isLoggedIn) {
+      setPublicIntegration(null);
+      return;
+    }
+
     const fetchPublicIntegration = async () => {
       try {
         setLoading(true);
         const response = await fetch(`${API_URL}/api/integration/public`);
-        
+
         if (response.ok) {
           const data = await response.json();
-          setPublicIntegration(data);
+          // Only set public integration if still not logged in (avoid race on /products etc.)
+          if (!isAuthenticated()) {
+            setPublicIntegration(data);
+          }
         } else if (response.status === 404) {
-          setPublicIntegration(null);
+          if (!isAuthenticated()) setPublicIntegration(null);
         } else {
           console.error("Failed to fetch public integration:", response.status);
-          setPublicIntegration(null);
+          if (!isAuthenticated()) setPublicIntegration(null);
         }
       } catch (error) {
         console.error("Error fetching public integration:", error);
-        setPublicIntegration(null);
+        if (!isAuthenticated()) setPublicIntegration(null);
       } finally {
-        // Only set loading to false if user is not logged in
-        // If logged in, wait for user integration to finish loading
-        if (!isLoggedIn) {
-          setLoading(false);
-        }
+        if (!isAuthenticated()) setLoading(false);
       }
     };
 
@@ -121,15 +131,7 @@ export function IntegrationWidget() {
     fetchUserIntegration();
   }, [isLoggedIn, userRole]);
 
-  // Determine which integration to use (prioritize user/admin if logged in, otherwise public)
-  const activeIntegration = React.useMemo(() => {
-    if (isLoggedIn && userIntegration) {
-      return userIntegration;
-    }
-    return publicIntegration;
-  }, [isLoggedIn, userIntegration, publicIntegration]);
-
-  // Process script tags for public integration (always load)
+  // Process script tags for public integration (guests only)
   useEffect(() => {
     if (!publicIntegration || !publicIntegration.iframeOrScript) {
       return;
@@ -262,38 +264,12 @@ export function IntegrationWidget() {
     };
   }, [userIntegration]);
 
-  // Process iframe integrations - combine public and user/admin
+  // Process iframe integrations: for logged-in customers/admins show only their iframe; for guests show only public
   useEffect(() => {
     const allIframes: ProcessedIframe[] = [];
 
-    // Process public integration iframe (always load)
-    if (publicIntegration && publicIntegration.iframeOrScript) {
-      const embedCode = publicIntegration.iframeOrScript.trim();
-
-      if (embedCode.startsWith("<iframe")) {
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = embedCode;
-    const iframe = wrapper.querySelector("iframe");
-
-        if (iframe) {
-          const srcAttr = iframe.getAttribute("src");
-          if (srcAttr) {
-            let sanitizedSrc = srcAttr.trim();
-            const processedIframe: ProcessedIframe = {
-              integration: publicIntegration,
-              src: sanitizedSrc,
-              title: iframe.getAttribute("title") || "Public Agent",
-              allow: iframe.getAttribute("allow"),
-              loading: iframe.getAttribute("loading")
-            };
-            allIframes.push(processedIframe);
-    }
-        }
-      }
-    }
-
-    // Process user/admin integration iframe (if logged in)
     if (isLoggedIn && userIntegration && userIntegration.iframeOrScript) {
+      // Logged in (customer or admin): only load the user/admin iframe — not the public one (stable on refresh)
       const embedCode = userIntegration.iframeOrScript.trim();
 
       if (embedCode.startsWith("<iframe")) {
@@ -302,33 +278,54 @@ export function IntegrationWidget() {
         const iframe = wrapper.querySelector("iframe");
 
         if (iframe) {
-    const srcAttr = iframe.getAttribute("src");
+          const srcAttr = iframe.getAttribute("src");
           if (srcAttr) {
-    let sanitizedSrc = srcAttr.trim();
+            let sanitizedSrc = srcAttr.trim();
 
-    // Inject userId into iframe URL if user is logged in
-    const user = getUser();
-    if (user?.id) {
-      try {
-        const url = new URL(sanitizedSrc, window.location.origin);
-        url.searchParams.set("userId", String(user.id));
-        sanitizedSrc = url.toString();
-      } catch {
-        if (!sanitizedSrc.includes("userId=")) {
-          const separator = sanitizedSrc.includes("?") ? "&" : "?";
-          sanitizedSrc = `${sanitizedSrc}${separator}userId=${String(user.id)}`;
+            const user = getUser();
+            if (user?.id) {
+              try {
+                const url = new URL(sanitizedSrc, window.location.origin);
+                url.searchParams.set("userId", String(user.id));
+                sanitizedSrc = url.toString();
+              } catch {
+                if (!sanitizedSrc.includes("userId=")) {
+                  const separator = sanitizedSrc.includes("?") ? "&" : "?";
+                  sanitizedSrc = `${sanitizedSrc}${separator}userId=${String(user.id)}`;
+                }
+              }
+            }
+
+            allIframes.push({
+              integration: userIntegration,
+              src: sanitizedSrc,
+              title: iframe.getAttribute("title") || (userRole === "ADMIN" ? "Admin Agent" : "Customer Agent"),
+              allow: iframe.getAttribute("allow"),
+              loading: iframe.getAttribute("loading")
+            });
+          }
         }
       }
-    }
+    } else if (!isLoggedIn && publicIntegration && publicIntegration.iframeOrScript) {
+      // Not logged in: only load the public iframe
+      const embedCode = publicIntegration.iframeOrScript.trim();
 
-    const processedIframe: ProcessedIframe = {
-              integration: userIntegration,
-      src: sanitizedSrc,
-              title: iframe.getAttribute("title") || "User Agent",
-      allow: iframe.getAttribute("allow"),
-      loading: iframe.getAttribute("loading")
-    };
-            allIframes.push(processedIframe);
+      if (embedCode.startsWith("<iframe")) {
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = embedCode;
+        const iframe = wrapper.querySelector("iframe");
+
+        if (iframe) {
+          const srcAttr = iframe.getAttribute("src");
+          if (srcAttr) {
+            const sanitizedSrc = srcAttr.trim();
+            allIframes.push({
+              integration: publicIntegration,
+              src: sanitizedSrc,
+              title: iframe.getAttribute("title") || "Public Agent",
+              allow: iframe.getAttribute("allow"),
+              loading: iframe.getAttribute("loading")
+            });
           }
         }
       }
@@ -336,7 +333,7 @@ export function IntegrationWidget() {
 
     setProcessedIframes(allIframes);
     setLoading(false);
-  }, [publicIntegration, userIntegration, isLoggedIn]);
+  }, [publicIntegration, userIntegration, isLoggedIn, userRole]);
 
   // Don't render anything if loading or no iframes found
   // Public agent should load even when not logged in
@@ -346,9 +343,9 @@ export function IntegrationWidget() {
 
   return (
     <>
-      {processedIframes.map((iframeData, index) => (
+      {processedIframes.map((iframeData) => (
         <Box
-          key={iframeData.integration.id || `iframe-${index}`}
+          key={`iframe-${iframeData.integration.role}-${iframeData.integration.id || iframeData.integration.contextKey}`}
           component="div"
           sx={{
             position: "fixed",

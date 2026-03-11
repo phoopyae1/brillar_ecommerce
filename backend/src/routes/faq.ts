@@ -3,6 +3,7 @@ import { prisma } from "../prisma";
 import { authenticate, requireRole } from "../middleware/auth";
 import jwt from "jsonwebtoken";
 import { config } from "../config";
+import type { FaqListResponse } from "@brillar/shared";
 
 export const faqRouter = Router();
 
@@ -47,10 +48,20 @@ faqRouter.get("/", async (req, res) => {
         ]
       });
 
-      res.json({
-        faqs,
+      const body: FaqListResponse = {
+        faqs: faqs.map((f) => ({
+          id: f.id,
+          question: f.question,
+          answer: f.answer,
+          category: f.category,
+          order: f.order,
+          isActive: f.isActive,
+          createdAt: f.createdAt.toISOString(),
+          updatedAt: f.updatedAt.toISOString()
+        })),
         total: faqs.length
-      });
+      };
+      res.json(body);
     } catch (dbError: any) {
       // Handle case where table doesn't exist
       if (dbError.code === "P2021" || dbError.message?.includes("does not exist")) {

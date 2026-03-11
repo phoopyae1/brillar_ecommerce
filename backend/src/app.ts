@@ -16,6 +16,7 @@ import { ordersRouter } from "./routes/orders";
 import { adminRouter } from "./routes/admin";
 import { uploadRouter } from "./routes/upload";
 import { integrationRouter } from "./routes/integration";
+import { faqRouter } from "./routes/faq";
 import { adminAgentRouter } from "./routes/adminAgent";
 import { customerAgentRouter } from "./routes/customerAgent";
 import { agentRouter } from "./routes/agent";
@@ -93,5 +94,6 @@ app.use("/api/agent", agentRouter);
 app.use("/api/public", publicAgentRouter);
 app.use("/api/upload", uploadRouter);
 app.use("/api/integration", integrationRouter);
+app.use("/api/faq", faqRouter);
 
 app.use(errorHandler);

@@ -3,7 +3,7 @@ export declare const RoleEnum: z.ZodEnum<["ADMIN", "CUSTOMER"]>;
 export type Role = z.infer<typeof RoleEnum>;
 export declare const ProductStatusEnum: z.ZodEnum<["ACTIVE", "DRAFT"]>;
 export type ProductStatus = z.infer<typeof ProductStatusEnum>;
-export declare const OrderStatusEnum: z.ZodEnum<["PENDING", "PAID", "CANCELLED", "FULFILLED", "REFUNDED"]>;
+export declare const OrderStatusEnum: z.ZodEnum<["PENDING", "PAID", "PREPARING_TO_SHIP", "READY_TO_SHIP", "CANCELLED", "FULFILLED", "REFUNDED"]>;
 export type OrderStatus = z.infer<typeof OrderStatusEnum>;
 export declare const InventoryMovementTypeEnum: z.ZodEnum<["IN", "OUT", "ADJUST", "RESERVE", "RELEASE"]>;
 export type InventoryMovementType = z.infer<typeof InventoryMovementTypeEnum>;
@@ -35,6 +35,7 @@ export declare const ProductInputSchema: z.ZodObject<{
     slug: z.ZodString;
     description: z.ZodString;
     price: z.ZodNumber;
+    cost: z.ZodOptional<z.ZodNumber>;
     currency: z.ZodString;
     images: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     category: z.ZodString;
@@ -63,6 +64,7 @@ export declare const ProductInputSchema: z.ZodObject<{
     images: string[];
     category: string;
     tags: string[];
+    cost?: number | undefined;
     variants?: {
         sku: string;
         attributes: Record<string, string>;
@@ -76,6 +78,7 @@ export declare const ProductInputSchema: z.ZodObject<{
     currency: string;
     category: string;
     status?: "ACTIVE" | "DRAFT" | undefined;
+    cost?: number | undefined;
     images?: string[] | undefined;
     tags?: string[] | undefined;
     variants?: {
@@ -119,4 +122,37 @@ export declare const CheckoutSchema: z.ZodObject<{
     paymentMethod: string;
 }, {
     paymentMethod?: string | undefined;
+}>;
+export type FAQ = {
+    id: string;
+    question: string;
+    answer: string;
+    category: string | null;
+    order: number;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+};
+export type FaqListResponse = {
+    faqs: FAQ[];
+    total: number;
+};
+export declare const FaqSchema: z.ZodObject<{
+    question: z.ZodString;
+    answer: z.ZodString;
+    category: z.ZodNullable<z.ZodOptional<z.ZodString>>;
+    order: z.ZodDefault<z.ZodNumber>;
+    isActive: z.ZodDefault<z.ZodBoolean>;
+}, "strip", z.ZodTypeAny, {
+    question: string;
+    answer: string;
+    order: number;
+    isActive: boolean;
+    category?: string | null | undefined;
+}, {
+    question: string;
+    answer: string;
+    category?: string | null | undefined;
+    order?: number | undefined;
+    isActive?: boolean | undefined;
 }>;

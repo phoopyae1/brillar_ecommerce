@@ -75,3 +75,28 @@ export const CartItemSchema = z.object({
 export const CheckoutSchema = z.object({
   paymentMethod: z.string().default("SIMULATED")
 });
+
+// FAQ – single source of truth for backend (Prisma) and frontend
+export type FAQ = {
+  id: string;
+  question: string;
+  answer: string;
+  category: string | null;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FaqListResponse = {
+  faqs: FAQ[];
+  total: number;
+};
+
+export const FaqSchema = z.object({
+  question: z.string().min(1, "Question is required"),
+  answer: z.string().min(1, "Answer is required"),
+  category: z.string().optional().nullable(),
+  order: z.number().int().min(0).default(0),
+  isActive: z.boolean().default(true)
+});
