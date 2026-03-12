@@ -3,6 +3,7 @@ import { prisma } from "../prisma";
 import { authenticate, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { ProductInputSchema } from "@brillar/shared";
+import { recordAtenxionTransaction } from "../services/atenxion";
 
 export const productsRouter = Router();
 
@@ -168,6 +169,7 @@ productsRouter.post(
         return created;
       });
       res.status(201).json(product);
+      recordAtenxionTransaction(req.user!.id, "PRODUCT_ADDED").catch(() => {});
     } catch (error: any) {
       // Handle Prisma unique constraint errors
       if (error.code === "P2002") {
@@ -210,6 +212,7 @@ productsRouter.put(
       data: updateData
     });
     res.json(product);
+    recordAtenxionTransaction(req.user!.id, "PRODUCT_UPDATED").catch(() => {});
   }
 );
 
@@ -220,5 +223,6 @@ productsRouter.delete(
   async (req, res) => {
     await prisma.product.delete({ where: { id: req.params.id } });
     res.status(204).send();
+    recordAtenxionTransaction(req.user!.id, "PRODUCT_DELETED").catch(() => {});
   }
 );

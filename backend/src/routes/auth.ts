@@ -5,6 +5,7 @@ import { prisma } from "../prisma";
 import { config } from "../config";
 import { LoginSchema, RegisterSchema } from "@brillar/shared";
 import { validate } from "../middleware/validate";
+import { logoutAtenxionUser } from "../services/atenxion";
 
 export const authRouter = Router();
 
@@ -108,8 +109,22 @@ authRouter.post("/refresh", async (req, res) => {
 
 authRouter.post("/logout", async (req, res) => {
   const refreshToken = req.body.refreshToken as string | undefined;
+  let userId: string | null = null;
+
   if (refreshToken) {
+    const stored = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+      select: { userId: true }
+    });
+    if (stored) {
+      userId = stored.userId;
+    }
     await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
   }
+
+  if (userId) {
+    logoutAtenxionUser(userId).catch(() => {});
+  }
+
   res.status(204).send();
 });

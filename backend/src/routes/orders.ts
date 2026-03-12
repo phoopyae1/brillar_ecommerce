@@ -5,6 +5,7 @@ import { authenticate, requireRole } from "../middleware/auth";
 import { CheckoutSchema } from "@brillar/shared";
 import { validate } from "../middleware/validate";
 import { adjustInventory, consumeInventory } from "../services/inventoryService";
+import { recordAtenxionTransaction } from "../services/atenxion";
 
 export const ordersRouter = Router();
 
@@ -421,6 +422,7 @@ ordersRouter.post(
     });
 
     res.status(201).json(order);
+    recordAtenxionTransaction(order.userId, "TRANSACTION").catch(() => {});
   }
 );
 

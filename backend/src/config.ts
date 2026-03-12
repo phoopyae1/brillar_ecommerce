@@ -7,7 +7,8 @@ const envSchema = z.object({
   MONGODB_URI: z.string().url().optional(),
   JWT_SECRET: z.string().min(10),
   JWT_REFRESH_SECRET: z.string().min(10),
-  CORS_ORIGIN: z.string().default("http://localhost:3000")
+  CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  ATENXION_API_URL: z.string().url().optional()
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -24,5 +25,6 @@ export const config = {
   mongodbUri: parsed.data.MONGODB_URI || "mongodb://localhost:27017/brillarecommerce",
   jwtSecret: parsed.data.JWT_SECRET,
   jwtRefreshSecret: parsed.data.JWT_REFRESH_SECRET,
-  corsOrigin: parsed.data.CORS_ORIGIN
+  corsOrigin: parsed.data.CORS_ORIGIN,
+  atenxionApiUrl: parsed.data.ATENXION_API_URL
 };
